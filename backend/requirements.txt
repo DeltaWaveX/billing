@@ -1,0 +1,6 @@
+Django
+psycopg2-binary
+django-stubs
+djangorestframework
+django-cors-headers
+PyJWT
