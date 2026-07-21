@@ -58,6 +58,12 @@ export default function WholesaleBilling() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [addQty, setAddQty] = useState("1")
   const [productComboboxOpen, setProductComboboxOpen] = useState(false)
+  const [productSearch, setProductSearch] = useState("")
+
+  const filteredProductsForDropdown = allProducts.filter(p => 
+    p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+    (p as any).barcode?.includes(productSearch)
+  ).slice(0, 50)
 
   const loadData = async () => {
     try {
@@ -432,12 +438,16 @@ export default function WholesaleBilling() {
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </PopoverTrigger>
                 <PopoverContent className="w-[300px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search item..." />
+                  <Command shouldFilter={false}>
+                    <CommandInput 
+                      placeholder="Search item..." 
+                      value={productSearch}
+                      onValueChange={setProductSearch}
+                    />
                     <CommandList>
                       <CommandEmpty>No item found.</CommandEmpty>
                       <CommandGroup>
-                        {allProducts.map((p) => (
+                        {filteredProductsForDropdown.map((p) => (
                           <CommandItem
                             key={p.id}
                             value={p.name.split("/")[0]}

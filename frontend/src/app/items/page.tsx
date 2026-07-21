@@ -37,6 +37,10 @@ export default function ItemsPage() {
   const [units, setUnits] = useState<Unit[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 50
 
   // Dialog states
   const [isOpen, setIsOpen] = useState(false)
@@ -270,6 +274,16 @@ export default function ItemsPage() {
       item.barcode.includes(searchQuery)
   )
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery])
+
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage)
+  const currentItems = filteredItems.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
+
   return (
     <div className="flex-1 space-y-4">
       <div className="flex items-center justify-between">
@@ -321,10 +335,10 @@ export default function ItemsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredItems.length > 0 ? (
-                filteredItems.map((item, index) => (
+              {currentItems.length > 0 ? (
+                currentItems.map((item, index) => (
                   <TableRow key={item.id} className="hover:bg-muted/30">
-                    <TableCell className="text-center font-medium">{index + 1}</TableCell>
+                    <TableCell className="text-center font-medium">{(currentPage - 1) * itemsPerPage + index + 1}</TableCell>
                     <TableCell className="max-w-md font-bold whitespace-normal break-words">{item.name}</TableCell>
                     <TableCell>{item.unit}</TableCell>
                     <TableCell>₹{parseFloat(String(item.purchaseprice)).toFixed(2)}</TableCell>
@@ -351,6 +365,18 @@ export default function ItemsPage() {
               )}
             </TableBody>
           </Table>
+        </div>
+      )}
+
+      {!loading && !error && filteredItems.length > 0 && (
+        <div className="flex items-center justify-between py-4">
+          <span className="text-sm text-muted-foreground">
+            Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length} items
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>Previous</Button>
+            <Button variant="outline" disabled={currentPage === totalPages || totalPages === 0} onClick={() => setCurrentPage(p => p + 1)}>Next</Button>
+          </div>
         </div>
       )}
 

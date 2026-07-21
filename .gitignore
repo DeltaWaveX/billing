@@ -1,1 +1,24 @@
-.vscode
+.vscode/
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+venv/
+env/
+.env
+
+# Data files & temp scripts
+*.csv
+data_dump.json
+scraped_wholesale_bills_all.json
+extract_bills.py
+import_csvs.py
+test_db.py
+
+# Frontend (if not caught by frontend/.gitignore)
+node_modules/
+.next/
+settings.py
