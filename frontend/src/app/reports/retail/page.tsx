@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Search, RefreshCw } from "lucide-react"
+import { Search, RefreshCw, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { billingsApi } from "@/lib/api"
 
@@ -52,7 +52,7 @@ export default function RetailReportPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-2xl font-bold tracking-tight">Retail Report</h2>
         <div className="flex gap-2 items-center w-full sm:w-auto">
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-72 print:hidden">
             <Input
               placeholder="Search by customer name, phone, or bill number..."
               value={searchQuery}
@@ -61,9 +61,14 @@ export default function RetailReportPage() {
             />
             <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
           </div>
-          <Button variant="outline" onClick={loadBills} className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+          <div className="flex gap-2 print:hidden">
+            <Button variant="outline" onClick={() => window.print()} className="gap-2">
+              <Printer className="h-4 w-4" /> Print
+            </Button>
+            <Button variant="outline" onClick={loadBills} className="w-10 p-0">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -90,7 +95,7 @@ export default function RetailReportPage() {
               {filteredBills.length > 0 ? (
                 filteredBills.map((bill, index) => (
                   <TableRow key={index} className="hover:bg-muted/30">
-                    <TableCell className="font-medium">INV-{bill.id}</TableCell>
+                    <TableCell className="font-medium">{bill.bill_number}</TableCell>
                     <TableCell className="font-bold">{bill.customer_name || "Walk-in"}</TableCell>
                     <TableCell>{bill.phonenumber}</TableCell>
                     <TableCell>{new Date(bill.datetime).toLocaleString()}</TableCell>

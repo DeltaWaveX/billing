@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -10,67 +11,36 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Search, RefreshCw } from "lucide-react"
-import { productsApi } from "@/lib/api"
-
-export interface UnitItem {
-  id: number | string
-  printLabel: string
-  name: string
-}
-
-export const defaultUnits: UnitItem[] = [
-  { id: "d1", printLabel: "B", name: "BAGS" },
-  { id: "d2", printLabel: "T", name: "TIN" },
-  { id: "d3", printLabel: "C", name: "COT" },
-  { id: "d4", printLabel: "P", name: "PIECES" },
-  { id: "d5", printLabel: "L", name: "LITERS" },
-  { id: "d6", printLabel: "K", name: "KGS" },
-]
-
-export const dummyUnits = defaultUnits // For backward compatibility/imports
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Search, RefreshCw, Plus, Edit, Trash2 } from "lucide-react"
+import { unitsApi, Unit } from "@/lib/api"
 
 export default function UnitsPage() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [units, setUnits] = useState<UnitItem[]>([])
+  const [units, setUnits] = useState<Unit[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Dialog state
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [editingUnit, setEditingUnit] = useState<Unit | null>(null)
+  
+  // Form state
+  const [name, setName] = useState("")
+  const [printLabel, setPrintLabel] = useState("")
+  const [saving, setSaving] = useState(false)
 
   const loadUnits = async () => {
     try {
       setLoading(true)
-      const products = await productsApi.getAll()
-      
-      // Extract unique unit names from products
-      const activeUnitsMap = new Map<string, string>()
-      products.forEach(p => {
-        if (p.unit && p.unit.trim()) {
-          const val = p.unit.trim().toUpperCase()
-          // Infer abbreviation printLabel
-          const label = val.substring(0, 1)
-          activeUnitsMap.set(val, label)
-        }
-      })
-
-      // Start with default units
-      const mergedList: UnitItem[] = [...defaultUnits]
-
-      // Add active units from products that aren't already defaults
-      let idx = 1
-      activeUnitsMap.forEach((label, name) => {
-        const exists = defaultUnits.some(d => d.name.toUpperCase() === name)
-        if (!exists) {
-          mergedList.push({
-            id: `a${idx++}`,
-            printLabel: label,
-            name: name,
-          })
-        }
-      })
-
-      setUnits(mergedList)
+      const data = await unitsApi.getAll()
+      setUnits(data)
     } catch (e) {
-      console.error("Failed to load active units:", e)
-      setUnits(defaultUnits)
+      console.error("Failed to load units:", e)
     } finally {
       setLoading(false)
     }
@@ -80,13 +50,63 @@ export default function UnitsPage() {
     loadUnits()
   }, [])
 
+  const handleOpenAdd = () => {
+    setEditingUnit(null)
+    setName("")
+    setPrintLabel("")
+    setIsDialogOpen(true)
+  }
+
+  const handleOpenEdit = (unit: Unit) => {
+    setEditingUnit(unit)
+    setName(unit.name)
+    setPrintLabel(unit.print_label)
+    setIsDialogOpen(true)
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this unit?")) return
+    try {
+      setLoading(true)
+      await unitsApi.delete(id)
+      await loadUnits()
+    } catch (e) {
+      console.error("Failed to delete unit:", e)
+      alert("Failed to delete unit")
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!name || !printLabel) {
+      alert("Please enter both Name and Print Label")
+      return
+    }
+    
+    setSaving(true)
+    try {
+      if (editingUnit && editingUnit.id) {
+        await unitsApi.update(editingUnit.id, { name, print_label: printLabel })
+      } else {
+        await unitsApi.create({ name, print_label: printLabel })
+      }
+      setIsDialogOpen(false)
+      await loadUnits()
+    } catch (e) {
+      console.error("Failed to save unit:", e)
+      alert("Failed to save unit")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const filteredUnits = units.filter(
     (unit) =>
       unit.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      unit.printLabel.toLowerCase().includes(searchQuery.toLowerCase())
+      unit.print_label.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  if (loading) {
+  if (loading && units.length === 0) {
     return (
       <div className="flex h-[300px] items-center justify-center">
         <RefreshCw className="h-8 w-8 animate-spin text-[#6b4783]" />
@@ -101,6 +121,9 @@ export default function UnitsPage() {
           <h2 className="text-2xl font-bold tracking-tight">List of Units</h2>
           <p className="text-muted-foreground">List of units in use by your product inventory.</p>
         </div>
+        <Button onClick={handleOpenAdd} className="bg-[#6b4783] hover:bg-[#563969] text-white">
+          <Plus className="mr-2 h-4 w-4" /> Add Unit
+        </Button>
       </div>
 
       <div className="flex items-center justify-between gap-4 py-2">
@@ -122,25 +145,31 @@ export default function UnitsPage() {
               <TableHead className="w-[80px]">#</TableHead>
               <TableHead>Print label</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredUnits.map((unit, index) => {
-              const isDefault = String(unit.id).startsWith("d")
-              return (
-                <TableRow key={unit.id}>
-                  <TableCell className="font-medium">{index + 1}</TableCell>
-                  <TableCell>{unit.printLabel}</TableCell>
-                  <TableCell>{unit.name}</TableCell>
-                  <TableCell>
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${isDefault ? "bg-muted text-muted-foreground" : "bg-green-100 text-green-800"}`}>
-                      {isDefault ? "Standard Default" : "Custom/In-Use"}
-                    </span>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
+            {filteredUnits.length > 0 ? filteredUnits.map((unit, index) => (
+              <TableRow key={unit.id}>
+                <TableCell className="font-medium">{index + 1}</TableCell>
+                <TableCell>{unit.print_label}</TableCell>
+                <TableCell>{unit.name}</TableCell>
+                <TableCell className="text-right">
+                  <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(unit)}>
+                    <Edit className="h-4 w-4 text-blue-600" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => unit.id && handleDelete(unit.id)}>
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            )) : (
+              <TableRow>
+                <TableCell colSpan={4} className="h-24 text-center">
+                  No results.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
@@ -148,6 +177,40 @@ export default function UnitsPage() {
       <div className="text-sm font-medium text-[#6b4783] pt-2 px-1">
         Records : {filteredUnits.length} of {units.length}
       </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingUnit ? "Edit Unit" : "Add Unit"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Name</label>
+              <Input 
+                value={name} 
+                onChange={e => setName(e.target.value)} 
+                placeholder="e.g. KILOGRAMS" 
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Print Label</label>
+              <Input 
+                value={printLabel} 
+                onChange={e => setPrintLabel(e.target.value)} 
+                placeholder="e.g. KG" 
+              />
+            </div>
+            <Button 
+              onClick={handleSave} 
+              className="w-full bg-[#6b4783] hover:bg-[#563969] text-white"
+              disabled={saving}
+            >
+              {saving ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save Unit
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

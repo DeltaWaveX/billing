@@ -57,13 +57,13 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/retail">
+          <Link href="/retail#new">
             <Button className="gap-2 bg-[#6b4783] hover:bg-[#563969]">
               <ShoppingCart className="h-4 w-4" />
               New Retail Bill
             </Button>
           </Link>
-          <Link href="/wholesale">
+          <Link href="/wholesale#new">
             <Button variant="secondary" className="gap-2">
               <Truck className="h-4 w-4" />
               New Wholesale Bill
@@ -137,7 +137,7 @@ export default function Dashboard() {
             <div className="space-y-8">
               {stats?.recent_bills && stats.recent_bills.length > 0 ? (
                 stats.recent_bills.map((bill) => (
-                  <div key={bill.id} className="flex items-center">
+                  <div key={bill.billNo} className="flex items-center">
                     <div className="ml-4 space-y-1">
                       <p className="text-sm font-medium leading-none">{bill.billNo}</p>
                       <p className="text-sm text-muted-foreground">

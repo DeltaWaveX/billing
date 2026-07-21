@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, product, customer, billing, billing_product_mapping, barcodeMapping, expense
+from .models import User, product, customer, retail_billing, wholesale_billing, retail_billing_product_mapping, wholesale_billing_product_mapping, barcodeMapping, expense, unit
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -33,14 +33,24 @@ class CustomerSerializer(serializers.ModelSerializer):
         model = customer
         fields = '__all__'
 
-class BillingSerializer(serializers.ModelSerializer):
+class RetailBillingSerializer(serializers.ModelSerializer):
     class Meta:
-        model = billing
+        model = retail_billing
         fields = '__all__'
 
-class BillingProductMappingSerializer(serializers.ModelSerializer):
+class WholesaleBillingSerializer(serializers.ModelSerializer):
     class Meta:
-        model = billing_product_mapping
+        model = wholesale_billing
+        fields = '__all__'
+
+class RetailBillingProductMappingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = retail_billing_product_mapping
+        fields = '__all__'
+
+class WholesaleBillingProductMappingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = wholesale_billing_product_mapping
         fields = '__all__'
 
 class BarcodeMappingSerializer(serializers.ModelSerializer):
@@ -51,4 +61,9 @@ class BarcodeMappingSerializer(serializers.ModelSerializer):
 class ExpenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = expense
+        fields = '__all__'
+
+class UnitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = unit
         fields = '__all__'

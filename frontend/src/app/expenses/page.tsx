@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Trash2, Search, RefreshCw } from "lucide-react"
+import { Plus, Trash2, Search, RefreshCw, Edit } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { expensesApi, Expense } from "@/lib/api"
 import { defaultCategories } from "@/app/expense-categories/page"
@@ -39,7 +39,9 @@ export default function ExpensesPage() {
   const [error, setError] = useState<string | null>(null)
 
   // Dialog state
+  // Dialog state
   const [isOpen, setIsOpen] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   // Form states
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
@@ -69,6 +71,7 @@ export default function ExpensesPage() {
   }, [])
 
   const openAddDialog = () => {
+    setEditingId(null)
     setDate(new Date().toISOString().split('T')[0])
     setSelectedCategory("")
     setCustomCategory("")
@@ -76,6 +79,29 @@ export default function ExpensesPage() {
     setAmount("")
     setMethod("Cash")
     setNote("")
+    setIsOpen(true)
+  }
+
+  const openEditDialog = (exp: Expense) => {
+    if (exp.id) setEditingId(exp.id)
+    
+    const details = parseDescription(exp.description)
+    setDate(details.date !== "N/A" ? details.date : new Date().toISOString().split('T')[0])
+    setMethod(details.method !== "N/A" ? details.method : "Cash")
+    setNote(details.note)
+    setAmount(exp.amount.toString())
+    
+    const isDefaultCategory = defaultCategories.some(c => c.name === exp.category)
+    if (isDefaultCategory) {
+      setSelectedCategory(exp.category)
+      setShowCustomCatInput(false)
+      setCustomCategory("")
+    } else {
+      setSelectedCategory("other")
+      setShowCustomCatInput(true)
+      setCustomCategory(exp.category)
+    }
+    
     setIsOpen(true)
   }
 
@@ -121,8 +147,13 @@ export default function ExpensesPage() {
         description: packedDescription
       }
 
-      await expensesApi.create(payload)
+      if (editingId) {
+        await expensesApi.update(editingId, payload)
+      } else {
+        await expensesApi.create(payload)
+      }
       setIsOpen(false)
+      setEditingId(null)
       await loadExpenses()
     } catch (e) {
       console.error(e)
@@ -227,14 +258,24 @@ export default function ExpensesPage() {
                         ₹{parseFloat(String(exp.amount)).toFixed(2)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button 
-                          onClick={() => exp.id && handleDelete(exp.id)} 
-                          variant="destructive" 
-                          size="sm" 
-                          className="h-7 w-7 p-0"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button 
+                            onClick={() => openEditDialog(exp)} 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-7 px-2 text-blue-600 hover:text-blue-700"
+                          >
+                            <Edit className="h-3 w-3 mr-1" /> Edit
+                          </Button>
+                          <Button 
+                            onClick={() => exp.id && handleDelete(exp.id)} 
+                            variant="destructive" 
+                            size="sm" 
+                            className="h-7 px-2"
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" /> Delete
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )
@@ -254,7 +295,7 @@ export default function ExpensesPage() {
         <DialogContent className="sm:max-w-[500px]">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
-              <DialogTitle>Add New Expense</DialogTitle>
+              <DialogTitle>{editingId ? "Edit Expense" : "Add New Expense"}</DialogTitle>
               <DialogDescription>
                 Record a new expense entry.
               </DialogDescription>

@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Search, Plus, MoreHorizontal, FileText, RefreshCw, Trash2 } from "lucide-react"
+import { Search, Plus, MoreHorizontal, FileText, RefreshCw, Trash2, Edit } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,6 +46,7 @@ export default function CustomersPage() {
   
   // Dialog state
   const [isOpen, setIsOpen] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   // Form states
   const [name, setName] = useState("")
@@ -72,10 +73,20 @@ export default function CustomersPage() {
   }, [])
 
   const openAddDialog = () => {
+    setEditingId(null)
     setName("")
     setPhone("")
     setGst("")
     setCustType("1")
+    setIsOpen(true)
+  }
+
+  const openEditDialog = (customer: Customer) => {
+    if (customer.id) setEditingId(customer.id)
+    setName(customer.name || "")
+    setPhone(customer.phone)
+    setGst(customer.gstin || "")
+    setCustType(customer.type.toString())
     setIsOpen(true)
   }
 
@@ -107,8 +118,13 @@ export default function CustomersPage() {
         gstin: gst || null,
         type: parseInt(custType),
       }
-      await customersApi.create(payload)
+      if (editingId) {
+        await customersApi.update(editingId, payload)
+      } else {
+        await customersApi.create(payload)
+      }
       setIsOpen(false)
+      setEditingId(null)
       await loadCustomers()
     } catch (e) {
       console.error(e)
@@ -186,6 +202,14 @@ export default function CustomersPage() {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <Button 
+                          onClick={() => openEditDialog(customer)} 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-7 px-2 text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit className="h-3 w-3 mr-1" /> Edit
+                        </Button>
+                        <Button 
                           onClick={() => customer.id && handleDelete(customer.id)} 
                           variant="destructive" 
                           size="sm" 
@@ -212,7 +236,7 @@ export default function CustomersPage() {
         <DialogContent className="sm:max-w-[425px]">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
-              <DialogTitle>Add New Customer</DialogTitle>
+              <DialogTitle>{editingId ? "Edit Customer" : "Add New Customer"}</DialogTitle>
               <DialogDescription>
                 Enter customer details here. Click save when you're done.
               </DialogDescription>
@@ -236,7 +260,7 @@ export default function CustomersPage() {
                   placeholder="Mobile Number" 
                   className="col-span-3" 
                   value={phone} 
-                  onChange={(e) => setPhone(e.target.value)} 
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))} 
                   required
                 />
               </div>

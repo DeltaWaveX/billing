@@ -29,12 +29,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Search, Plus, Edit, Trash2, RefreshCw } from "lucide-react"
-import { productsApi, barcodeMappingsApi, Product, BarcodeMapping } from "@/lib/api"
-import { defaultUnits } from "@/app/units/page"
+import { productsApi, barcodeMappingsApi, unitsApi, Product, BarcodeMapping, Unit } from "@/lib/api"
 
 export default function ItemsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [items, setItems] = useState<(Product & { barcode: string; barcodeId?: number })[]>([])
+  const [units, setUnits] = useState<Unit[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -61,9 +61,10 @@ export default function ItemsPage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [products, barcodes] = await Promise.all([
+      const [products, barcodes, unitsData] = await Promise.all([
         productsApi.getAll(),
         barcodeMappingsApi.getAll(),
+        unitsApi.getAll()
       ])
 
       const mapped = products.map((p) => {
@@ -75,6 +76,7 @@ export default function ItemsPage() {
         }
       })
       setItems(mapped)
+      setUnits(unitsData)
       setError(null)
     } catch (e: any) {
       console.error(e)
@@ -128,8 +130,8 @@ export default function ItemsPage() {
     setBarcodeValue(item.barcode)
     
     // Check if unit is in defaults
-    const isDefault = defaultUnits.some(d => d.printLabel.toLowerCase() === item.unit.toLowerCase())
-    if (isDefault) {
+    const isStandard = units.some(d => d.print_label.toLowerCase() === item.unit.toLowerCase())
+    if (isStandard) {
       setSelectedUnit(item.unit.toLowerCase())
       setShowCustomUnitInput(false)
     } else {
@@ -323,7 +325,7 @@ export default function ItemsPage() {
                 filteredItems.map((item, index) => (
                   <TableRow key={item.id} className="hover:bg-muted/30">
                     <TableCell className="text-center font-medium">{index + 1}</TableCell>
-                    <TableCell className="max-w-md font-bold">{item.name}</TableCell>
+                    <TableCell className="max-w-md font-bold whitespace-normal break-words">{item.name}</TableCell>
                     <TableCell>{item.unit}</TableCell>
                     <TableCell>₹{parseFloat(String(item.purchaseprice)).toFixed(2)}</TableCell>
                     <TableCell className="text-blue-600 font-semibold">{item.barcode}</TableCell>
@@ -426,9 +428,9 @@ export default function ItemsPage() {
                       <SelectValue placeholder="Select a value ..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {defaultUnits.map(unit => (
-                        <SelectItem key={unit.id} value={unit.printLabel.toLowerCase()}>
-                          {unit.printLabel} ({unit.name})
+                      {units.map(unit => (
+                        <SelectItem key={unit.id} value={unit.print_label.toLowerCase()}>
+                          {unit.print_label} ({unit.name})
                         </SelectItem>
                       ))}
                       <SelectItem value="other">Other (Input Custom Unit)</SelectItem>

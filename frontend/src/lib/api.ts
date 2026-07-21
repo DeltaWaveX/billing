@@ -151,6 +151,12 @@ export interface BarcodeMapping {
   barcode: string
 }
 
+export interface Unit {
+  id?: number
+  name: string
+  print_label: string
+}
+
 // API Services
 export const productsApi = {
   getAll: () => request<Product[]>("/products/"),
@@ -189,9 +195,19 @@ export const expensesApi = {
 
 export const billingsApi = {
   getAll: () => request<any[]>("/billings/"),
-  createBill: (data: CreateBillInput) => request<{ message: string; bill_id: number }>("/billings/create_bill/", { method: "POST", body: JSON.stringify(data) }),
+  getBill: (billNumber: string) => request<any>(`/billings/get_bill/?bill_number=${billNumber}`),
+  createBill: (data: CreateBillInput) => request<{ message: string; bill_id: number; bill_number: string }>("/billings/create_bill/", { method: "POST", body: JSON.stringify(data) }),
+  updateBill: (data: CreateBillInput & { bill_number: string }) => request<{ message: string; bill_number: string }>("/billings/update_bill/", { method: "PUT", body: JSON.stringify(data) }),
+  deleteBill: (billNumber: string) => request<void>(`/billings/delete_bill/?bill_number=${billNumber}`, { method: "DELETE" }),
   getDailySales: () => request<DailySaleItem[]>("/billings/daily_sales/"),
   getDashboardStats: () => request<DashboardStats>("/billings/dashboard_stats/"),
+}
+
+export const unitsApi = {
+  getAll: () => request<Unit[]>("/units/"),
+  create: (data: Unit) => request<Unit>("/units/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Unit) => request<Unit>(`/units/${id}/`, { method: "PUT", body: JSON.stringify(data) }),
+  delete: (id: number) => request<void>(`/units/${id}/`, { method: "DELETE" }),
 }
 
 export const authApi = {

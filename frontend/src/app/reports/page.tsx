@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, Printer } from "lucide-react"
 import { billingsApi } from "@/lib/api"
 
 interface DailySaleItem {
@@ -66,9 +66,14 @@ export default function DailySalesPage() {
           <h2 className="text-2xl font-bold tracking-tight">Daily Sales</h2>
           <p className="text-muted-foreground">Aggregated daily sales reports.</p>
         </div>
-        <Button variant="outline" onClick={loadSales} className="gap-2">
-          <RefreshCw className="h-4 w-4" /> Refresh
-        </Button>
+        <div className="flex gap-2 print:hidden">
+          <Button variant="outline" onClick={() => window.print()} className="gap-2">
+            <Printer className="h-4 w-4" /> Print
+          </Button>
+          <Button variant="outline" onClick={loadSales} className="gap-2">
+            <RefreshCw className="h-4 w-4" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -108,7 +113,7 @@ export default function DailySalesPage() {
 
           <div className="flex flex-col md:flex-row gap-6">
             {/* Left Filter Sidebar */}
-            <div className="w-full md:w-64 space-y-4">
+            <div className="w-full md:w-64 space-y-4 print:hidden">
               <div className="border rounded-md overflow-hidden bg-white shadow-sm">
                 <div className="bg-muted p-3 border-b">
                   <Label className="font-semibold">Filter Sales Date</Label>
