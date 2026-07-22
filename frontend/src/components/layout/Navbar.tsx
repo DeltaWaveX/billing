@@ -30,18 +30,7 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void } = {}) {
           <span className="sr-only">Toggle navigation menu</span>
         </Button>
       )}
-      <div className="w-full flex-1">
-        <form onSubmit={(e) => e.preventDefault()}>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search..."
-              className="w-full appearance-none bg-background pl-8 shadow-none md:w-2/3 lg:w-1/3"
-            />
-          </div>
-        </form>
-      </div>
+      <div className="w-full flex-1" />
       <Button variant="outline" size="icon" className="h-8 w-8 rounded-full">
         <Bell className="h-4 w-4" />
         <span className="sr-only">Toggle notifications</span>
@@ -51,21 +40,26 @@ export function Navbar({ onMenuClick }: { onMenuClick?: () => void } = {}) {
           <User className="h-5 w-5" />
           <span className="sr-only">Toggle user menu</span>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="w-64 p-3 shadow-lg border rounded-xl">
           <DropdownMenuGroup>
-            <DropdownMenuLabel>
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-bold text-slate-800 leading-none">
-                  {user?.fist_name} {user?.last_name || ""}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-none">
+            <DropdownMenuLabel className="p-0 font-normal">
+              <div className="flex flex-col space-y-1.5 p-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-slate-800 leading-none">
+                    {user?.fist_name} {user?.last_name || ""}
+                  </p>
+                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-purple-100 text-[#6b4783]">
+                    {user?.role === 1 ? "Admin" : "Cashier"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground break-all leading-snug">
                   {user?.email}
                 </p>
               </div>
             </DropdownMenuLabel>
           </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={logout} className="text-red-600 hover:text-red-700 hover:bg-red-50 cursor-pointer">
+          <DropdownMenuSeparator className="my-2" />
+          <DropdownMenuItem onClick={logout} className="text-red-600 hover:text-red-700 hover:bg-red-50 cursor-pointer font-medium">
             Logout
           </DropdownMenuItem>
         </DropdownMenuContent>
