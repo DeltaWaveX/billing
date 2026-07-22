@@ -24,8 +24,10 @@ export default function Dashboard() {
   const isAdmin = user?.role === 1
 
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [allProducts, setAllProducts] = useState<Product[]>([])
   const [pendingProducts, setPendingProducts] = useState<Product[]>([])
   const [pendingSearchQuery, setPendingSearchQuery] = useState("")
+  const [lowStockSearchQuery, setLowStockSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,6 +40,11 @@ export default function Dashboard() {
   const [wholesalePrice, setWholesalePrice] = useState("")
   const [savingPrice, setSavingPrice] = useState(false)
 
+  // Quick Stock Modal State
+  const [selectedStockProduct, setSelectedStockProduct] = useState<Product | null>(null)
+  const [newStockQty, setNewStockQty] = useState("")
+  const [savingStock, setSavingStock] = useState(false)
+
   const fetchStats = async () => {
     try {
       setLoading(true)
@@ -46,6 +53,7 @@ export default function Dashboard() {
         productsApi.getAll(true)
       ])
       setStats(statsData)
+      setAllProducts(productsData)
       
       // Filter unpriced products (purchaseprice === 0 or retailprice === 0)
       const unpriced = productsData.filter(p => 
@@ -58,6 +66,32 @@ export default function Dashboard() {
       setError("Failed to load dashboard statistics.")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const openStockModal = (product: Product) => {
+    setSelectedStockProduct(product)
+    setNewStockQty(product.stock !== null ? String(product.stock) : "0")
+  }
+
+  const handleSaveStock = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedStockProduct || !selectedStockProduct.id) return
+    try {
+      setSavingStock(true)
+      const updatedProduct: Product = {
+        ...selectedStockProduct,
+        stock: parseInt(newStockQty) || 0,
+      }
+      await productsApi.update(selectedStockProduct.id, updatedProduct)
+      productsApi.invalidateCache()
+      setSelectedStockProduct(null)
+      await fetchStats()
+    } catch (err) {
+      console.error(err)
+      alert("Failed to update product stock.")
+    } finally {
+      setSavingStock(false)
     }
   }
 
@@ -354,29 +388,99 @@ export default function Dashboard() {
         </Card>
 
         {/* Column 3: Low Stock Alerts */}
-        <Card className="flex flex-col">
-          <CardHeader>
-            <CardTitle className="text-base font-bold">Low Stock Alerts</CardTitle>
-            <CardDescription>Items running below reorder level (5 or less)</CardDescription>
-          </CardHeader>
-          <CardContent className="flex-1">
-            <div className="space-y-6">
-              {stats?.low_stock_alerts && stats.low_stock_alerts.length > 0 ? (
-                stats.low_stock_alerts.map((item, i) => (
-                  <div key={i} className="flex items-center">
-                    <PackageOpen className="h-8 w-8 p-1.5 bg-orange-100 rounded-full text-orange-600 shrink-0" />
-                    <div className="ml-3 space-y-0.5 overflow-hidden">
-                      <p className="text-sm font-medium leading-none truncate">{item.name.split("/")[0]}</p>
-                      <p className="text-xs text-red-500 font-medium">
-                        Only {item.stock} {item.unit} left
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-6 text-xs text-muted-foreground">No low-stock items detected.</div>
-              )}
+        <Card className="flex flex-col border-orange-200 bg-orange-50/10">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <PackageOpen className="h-4 w-4 text-orange-600" />
+                Low Stock Alerts
+              </CardTitle>
+              <CardDescription>Items running below reorder level (5 or less)</CardDescription>
             </div>
+            {(() => {
+              const lowStockProducts = allProducts.filter(p => p.stock !== null && p.stock <= 5)
+              return lowStockProducts.length > 0 ? (
+                <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300 font-bold">
+                  {lowStockProducts.length} low stock
+                </Badge>
+              ) : null
+            })()}
+          </CardHeader>
+          <CardContent className="flex-1 space-y-3">
+            {(() => {
+              const lowStockProducts = allProducts.filter(p => p.stock !== null && p.stock <= 5)
+              return (
+                <>
+                  {lowStockProducts.length > 0 && (
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Search low stock items by name..."
+                        className="pl-8 h-8 text-xs bg-white border-orange-200"
+                        value={lowStockSearchQuery}
+                        onChange={(e) => setLowStockSearchQuery(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                    {(() => {
+                      const query = lowStockSearchQuery.trim().toLowerCase()
+                      const filteredLowStock = lowStockProducts
+                        .filter((p) => !query || p.name.toLowerCase().includes(query))
+                        .sort((a, b) => {
+                          if (!query) return (a.stock ?? 0) - (b.stock ?? 0)
+                          const aName = a.name.toLowerCase()
+                          const bName = b.name.toLowerCase()
+                          const aStarts = aName.startsWith(query)
+                          const bStarts = bName.startsWith(query)
+                          if (aStarts && !bStarts) return -1
+                          if (!aStarts && bStarts) return 1
+                          return aName.indexOf(query) - bName.indexOf(query)
+                        })
+
+                      if (filteredLowStock.length > 0) {
+                        return filteredLowStock.slice(0, 15).map((product) => {
+                          const displayName = product.name.split("/")[0]
+                          return (
+                            <div key={product.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-white shadow-2xs">
+                              <div className="space-y-0.5 overflow-hidden pr-2">
+                                <p className="text-sm font-bold truncate">{displayName}</p>
+                                <p className="text-xs text-red-500 font-medium">
+                                  Only {product.stock} {product.unit} left
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => openStockModal(product)}
+                                className="h-8 text-xs font-semibold bg-[#6b4783] hover:bg-[#563969] text-white shrink-0"
+                              >
+                                Set Stock
+                              </Button>
+                            </div>
+                          )
+                        })
+                      }
+
+                      if (lowStockProducts.length > 0) {
+                        return (
+                          <div className="text-center py-6 text-xs text-muted-foreground">
+                            No low stock items match "{lowStockSearchQuery}"
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <div className="text-center py-8 space-y-2">
+                          <Check className="h-8 w-8 text-green-500 mx-auto" />
+                          <p className="text-xs text-muted-foreground font-medium">No low-stock items detected.</p>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                </>
+              )
+            })()}
           </CardContent>
         </Card>
       </div>
@@ -451,6 +555,54 @@ export default function Dashboard() {
                 <Button type="submit" disabled={savingPrice} className="bg-[#6b4783] hover:bg-[#563969] text-white">
                   {savingPrice ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : null}
                   Save Prices
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Set Stock Dialog */}
+      {selectedStockProduct && (
+        <Dialog open={!!selectedStockProduct} onOpenChange={(open) => !open && setSelectedStockProduct(null)}>
+          <DialogContent className="sm:max-w-[420px]">
+            <form onSubmit={handleSaveStock}>
+              <DialogHeader>
+                <DialogTitle className="text-xl font-semibold text-[#6b4783]">
+                  Update Inventory Stock
+                </DialogTitle>
+                <DialogDescription>
+                  Enter new stock quantity for <strong>{selectedStockProduct.name.split("/")[0]}</strong>.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dashStockQty" className="font-bold text-sm">
+                    Stock Quantity ({selectedStockProduct.unit}) <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="dashStockQty"
+                    type="number"
+                    min="0"
+                    placeholder="Enter quantity"
+                    value={newStockQty}
+                    onChange={(e) => setNewStockQty(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Current Stock: {selectedStockProduct.stock !== null ? selectedStockProduct.stock : "Unlimited"} {selectedStockProduct.unit}
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setSelectedStockProduct(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={savingStock} className="bg-[#6b4783] hover:bg-[#563969] text-white">
+                  {savingStock ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Save Stock
                 </Button>
               </DialogFooter>
             </form>
