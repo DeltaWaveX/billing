@@ -136,6 +136,17 @@ export interface RecentBill {
   total: number
 }
 
+export interface BillingItem {
+  id: number
+  bill_number: string
+  customer_name: string
+  phonenumber: string
+  grandtotal: number | string
+  paymentmode: string
+  datetime: string
+  type: number
+}
+
 export interface LowStockAlert {
   name: string
   stock: number
@@ -163,9 +174,31 @@ export interface Unit {
   print_label: string
 }
 
+// In-memory product cache for fast repeat access across page navigations
+let _productCache: Product[] | null = null
+let _productCachePromise: Promise<Product[]> | null = null
+
 // API Services
 export const productsApi = {
-  getAll: () => request<Product[]>("/products/"),
+  getAll: (forceRefresh = false): Promise<Product[]> => {
+    if (!forceRefresh && _productCache) {
+      return Promise.resolve(_productCache)
+    }
+    // Deduplicate concurrent in-flight requests
+    if (!forceRefresh && _productCachePromise) {
+      return _productCachePromise
+    }
+    _productCachePromise = request<Product[]>("/products/").then(data => {
+      _productCache = data
+      _productCachePromise = null
+      return data
+    }).catch(err => {
+      _productCachePromise = null
+      throw err
+    })
+    return _productCachePromise
+  },
+  invalidateCache: () => { _productCache = null; _productCachePromise = null },
   create: (data: Product) => request<Product>("/products/", { method: "POST", body: JSON.stringify(data) }),
   update: (id: number, data: Product) => request<Product>(`/products/${id}/`, { method: "PUT", body: JSON.stringify(data) }),
   delete: (id: number) => request<void>(`/products/${id}/`, { method: "DELETE" }),
@@ -188,7 +221,7 @@ export const customersApi = {
 export const usersApi = {
   getAll: () => request<User[]>("/users/"),
   create: (data: User) => request<User>("/users/", { method: "POST", body: JSON.stringify(data) }),
-  update: (id: number, data: User) => request<User>(`/users/${id}/`, { method: "PUT", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<User>) => request<User>(`/users/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
   delete: (id: number) => request<void>(`/users/${id}/`, { method: "DELETE" }),
 }
 
@@ -200,7 +233,7 @@ export const expensesApi = {
 }
 
 export const billingsApi = {
-  getAll: () => request<any[]>("/billings/"),
+  getAll: (type?: number) => request<BillingItem[]>(type !== undefined ? `/billings/?type=${type}` : "/billings/"),
   getBill: (billNumber: string) => request<any>(`/billings/get_bill/?bill_number=${billNumber}`),
   createBill: (data: CreateBillInput) => request<{ message: string; bill_id: number; bill_number: string }>("/billings/create_bill/", { method: "POST", body: JSON.stringify(data) }),
   updateBill: (data: CreateBillInput & { bill_number: string }) => request<{ message: string; bill_number: string }>("/billings/update_bill/", { method: "PUT", body: JSON.stringify(data) }),

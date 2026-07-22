@@ -31,7 +31,7 @@ class product(models.Model):
     purchaseprice = models.DecimalField(max_digits = 10, decimal_places = 2, default=0.00)
 
     class Meta:
-        ordering = ['id']
+        ordering = ['-id']
 
 
 class customer(models.Model):
@@ -44,51 +44,37 @@ class customer(models.Model):
     #2 = wholesale
 
 
-class retail_billing(models.Model):
+class billing(models.Model):
     id = models.AutoField(primary_key=True)
-    bill_number = models.CharField(max_length=255, unique=True, null=True, blank=True)
+    bill_number = models.CharField(max_length=255, unique=True, null=True, blank=True, db_index=True)
     customer = models.ForeignKey(customer, on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    phonenumber = models.CharField(max_length = 10)
-    datetime = models.DateTimeField(auto_now_add=True)
-    grandtotal = models.DecimalField(max_digits = 10, decimal_places = 2)
+    phonenumber = models.CharField(max_length=10)
+    datetime = models.DateTimeField(auto_now_add=True, db_index=True)
+    grandtotal = models.DecimalField(max_digits=10, decimal_places=2)
     paymentmode = models.CharField(max_length=255)
+    bill_type = models.IntegerField(default=1, db_index=True)
+    # 1 = Retail (R), 2 = Wholesale (W), 3 = Hybrid (H)
+
+    items_mapping: models.QuerySet['billing_product_mapping']
+
+    class Meta:
+        ordering = ['-datetime']
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         if not self.bill_number:
-            self.bill_number = f"R{self.id}"
+            prefix_map = {1: 'R', 2: 'W', 3: 'H'}
+            prefix = prefix_map.get(self.bill_type, 'R')
+            type_count = billing.objects.filter(bill_type=self.bill_type, id__lte=self.id).count()
+            self.bill_number = f"{prefix}{type_count}"
             super().save(update_fields=["bill_number"])
 
-class wholesale_billing(models.Model):
-    id = models.AutoField(primary_key=True)
-    bill_number = models.CharField(max_length=255, unique=True, null=True, blank=True)
-    customer = models.ForeignKey(customer, on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    phonenumber = models.CharField(max_length = 10)
-    datetime = models.DateTimeField(auto_now_add=True)
-    grandtotal = models.DecimalField(max_digits = 10, decimal_places = 2)
-    paymentmode = models.CharField(max_length=255)
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        if not self.bill_number:
-            self.bill_number = f"W{self.id}"
-            super().save(update_fields=["bill_number"])
-
-class retail_billing_product_mapping(models.Model):
+class billing_product_mapping(models.Model):
     id = models.AutoField(primary_key=True)
     product_id = models.ForeignKey(product, on_delete=models.CASCADE)
-    billing_id = models.ForeignKey(retail_billing, on_delete=models.CASCADE) 
-    quantity = models.IntegerField()  
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    line_total = models.DecimalField(max_digits=10, decimal_places=2)
-
-class wholesale_billing_product_mapping(models.Model):
-    id = models.AutoField(primary_key=True)
-    product_id = models.ForeignKey(product, on_delete=models.CASCADE)
-    billing_id = models.ForeignKey(wholesale_billing, on_delete=models.CASCADE) 
-    quantity = models.IntegerField()  
+    billing_id = models.ForeignKey(billing, on_delete=models.CASCADE, related_name='items_mapping')
+    quantity = models.IntegerField()
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     line_total = models.DecimalField(max_digits=10, decimal_places=2)
 

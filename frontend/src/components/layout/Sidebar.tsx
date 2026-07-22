@@ -11,6 +11,7 @@ import {
   Boxes,
   ShoppingCart,
   Truck,
+  Layers,
   UserCog,
   Receipt,
   Tags,
@@ -23,18 +24,20 @@ import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
 
 const navItems = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/", icon: LayoutDashboard, adminOnly: true },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Master Items", href: "/items", icon: Package },
   { name: "Master Units", href: "/units", icon: Boxes },
   { name: "Retail Billing", href: "/retail", icon: ShoppingCart },
   { name: "Wholesale Billing", href: "/wholesale", icon: Truck },
+  { name: "Hybrid Billing", href: "/hybrid", icon: Layers },
   { name: "Users", href: "/users", icon: UserCog, adminOnly: true },
   { name: "Expenses", href: "/expenses", icon: Receipt },
   { name: "Expense Categories", href: "/expense-categories", icon: Tags },
   {
     name: "Sale Reports",
     icon: BarChart3,
+    adminOnly: true,
     subItems: [
       { name: "$ wholesale sales", href: "/reports/wholesale" },
       { name: "Daily Sales", href: "/reports" },

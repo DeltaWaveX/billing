@@ -49,7 +49,8 @@ export default function ItemsPage() {
   // Form states
   const [nameEn, setNameEn] = useState("")
   const [nameTe, setNameTe] = useState("")
-  const [barcodeOption, setBarcodeOption] = useState("AGBC") // AGBC: Auto, CBC: Company
+  const [nameSecondary, setNameSecondary] = useState("")
+  const [barcodeOption, setBarcodeOption] = useState<"AGBC" | "CBC">("AGBC")
   const [barcodeValue, setBarcodeValue] = useState("")
   const [selectedUnit, setSelectedUnit] = useState("")
   const [customUnit, setCustomUnit] = useState("")
@@ -66,7 +67,7 @@ export default function ItemsPage() {
     try {
       setLoading(true)
       const [products, barcodes, unitsData] = await Promise.all([
-        productsApi.getAll(),
+        productsApi.getAll(true),
         barcodeMappingsApi.getAll(),
         unitsApi.getAll()
       ])
@@ -109,6 +110,7 @@ export default function ItemsPage() {
     setEditingItem(null)
     setNameEn("")
     setNameTe("")
+    setNameSecondary("")
     setBarcodeOption("AGBC")
     setBarcodeValue("")
     setSelectedUnit("")
@@ -130,6 +132,11 @@ export default function ItemsPage() {
     const parts = item.name.split("/")
     setNameEn(parts[0] || item.name)
     setNameTe(parts[1] || "")
+    if (parts.length >= 4) {
+      setNameSecondary(parts[2] || "")
+    } else {
+      setNameSecondary("")
+    }
     setBarcodeOption("CBC")
     setBarcodeValue(item.barcode)
     
@@ -217,7 +224,8 @@ export default function ItemsPage() {
         ? Math.floor(100000 + Math.random() * 900000).toString()
         : barcodeValue
 
-      const combinedName = `${nameEn}/${nameTe || nameEn}/${finalBarcode}`
+      const secPart = nameSecondary ? `/${nameSecondary}` : ""
+      const combinedName = `${nameEn}/${nameTe || nameEn}${secPart}/${finalBarcode}`
 
       const payload: Product = {
         name: combinedName,
@@ -393,7 +401,7 @@ export default function ItemsPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-6 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="nameEn">Name in English <span className="text-destructive">*</span></Label>
                   <Input 
@@ -414,7 +422,17 @@ export default function ItemsPage() {
                     value={nameTe}
                     onChange={(e) => setNameTe(e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground">For receipt printing purposes (auto-translates from English)</p>
+                  <p className="text-xs text-muted-foreground">Auto-translates from English</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="nameSecondary">Secondary / Custom Name</Label>
+                  <Input 
+                    id="nameSecondary" 
+                    placeholder="Enter Additional Name" 
+                    value={nameSecondary}
+                    onChange={(e) => setNameSecondary(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Manual name (doesn't convert to Telugu)</p>
                 </div>
               </div>
 

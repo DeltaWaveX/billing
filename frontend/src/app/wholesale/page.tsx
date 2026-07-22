@@ -68,14 +68,12 @@ export default function WholesaleBilling() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [billsData, productsData] = await Promise.all([
-        billingsApi.getAll(),
-        productsApi.getAll()
+      // Fetch only wholesale bills (type=2) from backend; load products from cache in background
+      const [billsData] = await Promise.all([
+        billingsApi.getAll(2),
+        productsApi.getAll().then(data => { setAllProducts(data) }).catch(() => {}),
       ])
-      // Filter for Wholesale bills (type 2)
-      const wholesaleBills = billsData.filter(b => b.type === 2)
-      setBills(wholesaleBills)
-      setAllProducts(productsData)
+      setBills(billsData)
       setError(null)
     } catch (e) {
       console.error(e)
@@ -238,9 +236,10 @@ export default function WholesaleBilling() {
 
   const filteredBills = bills.filter(
     (b) =>
-      (b.customer_name && b.customer_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      b.bill_number?.startsWith("W") &&
+      ((b.customer_name && b.customer_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       b.phonenumber.includes(searchQuery) ||
-      String(b.id).includes(searchQuery)
+      String(b.id).includes(searchQuery))
   )
 
   if (viewMode === 'list') {

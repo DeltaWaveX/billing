@@ -30,9 +30,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(storedToken)
       setUser(storedUser)
       
-      // If user is at login screen but already has a session, redirect to home
+      const adminOnlyRoutes = ["/", "/users", "/reports", "/reports/wholesale", "/reports/retail"]
+      const isAdmin = storedUser.role === 1
+
+      // If user is at login screen but already has a session, redirect to appropriate home
       if (pathname === "/login") {
-        router.push("/")
+        router.push(isAdmin ? "/" : "/retail")
+      } else if (!isAdmin && adminOnlyRoutes.includes(pathname)) {
+        // Prevent cashier/staff from viewing admin-only pages
+        router.push("/retail")
       }
     } else {
       setToken(null)
@@ -50,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authStorage.saveSession(newToken, newUser)
     setToken(newToken)
     setUser(newUser)
-    router.push("/")
+    router.push(newUser.role === 1 ? "/" : "/retail")
   }
 
   const logout = () => {

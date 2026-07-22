@@ -181,7 +181,7 @@ export default function CustomersPage() {
                 <TableHead>#</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Contact</TableHead>
-                <TableHead>GSTIN</TableHead>
+                <TableHead>Area</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="w-[120px] text-right">Actions</TableHead>
               </TableRow>

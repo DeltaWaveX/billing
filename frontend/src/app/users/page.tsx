@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Plus, Search, Eye, Edit, Trash2, RefreshCw } from "lucide-react"
+import { Plus, Search, Edit, Trash2, RefreshCw } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -41,9 +41,11 @@ export default function UsersPage() {
   
   // Dialog state
   const [isOpen, setIsOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
 
   // Form states
   const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [role, setRole] = useState("biller")
@@ -80,10 +82,22 @@ export default function UsersPage() {
   }, [])
 
   const openAddDialog = () => {
+    setEditingUser(null)
     setName("")
+    setEmail("")
     setPassword("")
     setConfirmPassword("")
     setRole("biller")
+    setIsOpen(true)
+  }
+
+  const openEditDialog = (userToEdit: User) => {
+    setEditingUser(userToEdit)
+    setName(`${userToEdit.fist_name} ${userToEdit.last_name || ""}`.trim())
+    setEmail(userToEdit.email)
+    setPassword("")
+    setConfirmPassword("")
+    setRole(userToEdit.role === 1 ? "Administrator" : "biller")
     setIsOpen(true)
   }
 
@@ -102,11 +116,17 @@ export default function UsersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name || !password) {
+    if (!name) {
+      alert("Please enter the user name.")
+      return
+    }
+
+    if (!editingUser && (!password || !email)) {
       alert("Please fill in all required fields.")
       return
     }
-    if (password !== confirmPassword) {
+
+    if (password && password !== confirmPassword) {
       alert("Passwords do not match.")
       return
     }
@@ -117,25 +137,34 @@ export default function UsersPage() {
       const fistName = parts[0]
       const lastName = parts.slice(1).join(" ")
 
-      // Auto-generate unique placeholder email based on name
-      const rand = Math.floor(1000 + Math.random() * 9000)
-      const mockEmail = `${fistName.toLowerCase()}${rand}@fltrbilling.com`
-
-      const payload: User = {
-        fist_name: fistName, // Map to Django typo field
-        last_name: lastName || "Staff",
-        email: mockEmail,
-        password: password,
-        role: role === "Administrator" ? 1 : 2,
-        photourl: null,
+      let userEmail = email.trim()
+      if (!userEmail) {
+        const rand = Math.floor(1000 + Math.random() * 9000)
+        userEmail = `${fistName.toLowerCase()}${rand}@fltrbilling.com`
       }
 
-      await usersApi.create(payload)
+      const payload: Partial<User> = {
+        fist_name: fistName,
+        last_name: lastName || "Staff",
+        email: userEmail,
+        role: role === "Administrator" ? 1 : 2,
+      }
+
+      if (password) {
+        payload.password = password
+      }
+
+      if (editingUser && editingUser.id) {
+        await usersApi.update(editingUser.id, payload as User)
+      } else {
+        await usersApi.create(payload as User)
+      }
+
       setIsOpen(false)
       await loadUsers()
     } catch (e) {
       console.error(e)
-      alert("Failed to add new user.")
+      alert(editingUser ? "Failed to update user." : "Failed to add new user.")
       setLoading(false)
     }
   }
@@ -194,28 +223,31 @@ export default function UsersPage() {
             </TableHeader>
             <TableBody>
               {filteredUsers.length > 0 ? (
-                filteredUsers.map((user, index) => {
-                  const roleStr = user.role === 1 ? "Administrator" : "biller"
-                  const initial = user.fist_name.substring(0, 2).toUpperCase()
+                filteredUsers.map((u, index) => {
+                  const roleStr = u.role === 1 ? "Administrator" : "biller"
+                  const initial = u.fist_name.substring(0, 2).toUpperCase()
                   return (
-                    <TableRow key={user.id} className="hover:bg-muted/30">
+                    <TableRow key={u.id} className="hover:bg-muted/30">
                       <TableCell className="font-medium">{index + 1}</TableCell>
-                      <TableCell className="font-bold">{user.fist_name} {user.last_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                      <TableCell className="font-bold">{u.fist_name} {u.last_name}</TableCell>
+                      <TableCell className="text-muted-foreground">{u.email}</TableCell>
                       <TableCell>
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">{initial}</AvatarFallback>
                         </Avatar>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        <Badge variant={user.role === 1 ? "default" : "secondary"}>
+                        <Badge variant={u.role === 1 ? "default" : "secondary"}>
                           {roleStr}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <Button onClick={() => user.id && handleDelete(user.id)} variant="destructive" size="sm" className="h-7 w-7 p-0 rounded-sm">
-                            <Trash2 className="h-3 w-3" />
+                          <Button onClick={() => openEditDialog(u)} variant="outline" size="sm" className="h-8 px-2 border-slate-300 hover:bg-slate-100">
+                            <Edit className="h-3.5 w-3.5 mr-1 text-slate-700" /> Edit
+                          </Button>
+                          <Button onClick={() => u.id && handleDelete(u.id)} variant="destructive" size="sm" className="h-8 px-2">
+                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
                           </Button>
                         </div>
                       </TableCell>
@@ -236,43 +268,57 @@ export default function UsersPage() {
         Records : {filteredUsers.length} of {users.length}
       </div>
 
-      {/* Add User Dialog */}
+      {/* Add / Edit User Dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="sm:max-w-[550px]">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
-              <DialogTitle className="text-xl">Add New User</DialogTitle>
+              <DialogTitle className="text-xl">
+                {editingUser ? "Edit User Details" : "Add New User"}
+              </DialogTitle>
             </DialogHeader>
             <div className="grid gap-5 py-4">
               <div className="space-y-2">
                 <Label className="font-medium">Name <span className="text-destructive">*</span></Label>
                 <Input 
-                  placeholder="Enter Name" 
+                  placeholder="Enter Full Name" 
                   value={name} 
                   onChange={(e) => setName(e.target.value)} 
                   required 
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label className="font-medium">Email Address</Label>
+                <Input 
+                  type="email"
+                  placeholder="Enter Email Address" 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                />
+              </div>
               
               <div className="space-y-2">
-                <Label className="font-medium">Password <span className="text-destructive">*</span></Label>
+                <Label className="font-medium">
+                  Password {editingUser ? <span className="text-xs text-muted-foreground font-normal">(Leave blank to keep unchanged)</span> : <span className="text-destructive">*</span>}
+                </Label>
                 <Input 
                   type="password" 
-                  placeholder="Enter Password" 
+                  placeholder={editingUser ? "New password (optional)" : "Enter Password"} 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required 
+                  required={!editingUser} 
                 />
               </div>
 
               <div className="space-y-2">
-                <Label className="font-medium">Confirm Password <span className="text-destructive">*</span></Label>
+                <Label className="font-medium">Confirm Password</Label>
                 <Input 
                   type="password" 
                   placeholder="Confirm Password" 
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  required 
+                  required={!!password} 
                 />
               </div>
 
@@ -290,7 +336,9 @@ export default function UsersPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit" className="w-full sm:w-auto px-8 bg-green-600 hover:bg-green-700 text-white">Submit</Button>
+              <Button type="submit" className="w-full sm:w-auto px-8 bg-green-600 hover:bg-green-700 text-white">
+                {editingUser ? "Update User" : "Submit"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

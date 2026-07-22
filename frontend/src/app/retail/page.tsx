@@ -68,14 +68,12 @@ export default function RetailBilling() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [billsData, productsData] = await Promise.all([
-        billingsApi.getAll(),
-        productsApi.getAll()
+      // Fetch only retail bills (type=1) from backend; load products from cache in background
+      const [billsData] = await Promise.all([
+        billingsApi.getAll(1),
+        productsApi.getAll().then(data => { setAllProducts(data) }).catch(() => {}),
       ])
-      // Filter for Retail bills (type 1)
-      const retailBills = billsData.filter(b => b.type === 1)
-      setBills(retailBills)
-      setAllProducts(productsData)
+      setBills(billsData)
       setError(null)
     } catch (e) {
       console.error(e)
@@ -238,9 +236,10 @@ export default function RetailBilling() {
 
   const filteredBills = bills.filter(
     (b) =>
-      (b.customer_name && b.customer_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      b.bill_number?.startsWith("R") &&
+      ((b.customer_name && b.customer_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       b.phonenumber.includes(searchQuery) ||
-      String(b.id).includes(searchQuery)
+      String(b.id).includes(searchQuery))
   )
 
   if (viewMode === 'list') {

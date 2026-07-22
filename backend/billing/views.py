@@ -13,15 +13,13 @@ from django.db import transaction
 from django.utils import timezone
 from django.db.models import Sum, Count
 from django.db.models.functions import TruncDate
-from .models import User, product, customer, retail_billing, wholesale_billing, retail_billing_product_mapping, wholesale_billing_product_mapping, barcodeMapping, expense, unit
+from .models import User, product, customer, billing, billing_product_mapping, barcodeMapping, expense, unit
 from .serializers import (
     UserSerializer,
     ProductSerializer,
     CustomerSerializer,
-    RetailBillingSerializer,
-    WholesaleBillingSerializer,
-    RetailBillingProductMappingSerializer,
-    WholesaleBillingProductMappingSerializer,
+    BillingSerializer,
+    BillingProductMappingSerializer,
     BarcodeMappingSerializer,
     ExpenseSerializer,
     UnitSerializer,
@@ -108,11 +106,18 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
 class BillingViewSet(viewsets.ViewSet):
     def list(self, request):
-        retail_bills = retail_billing.objects.select_related('customer', 'user').all().order_by('-datetime')
-        wholesale_bills = wholesale_billing.objects.select_related('customer', 'user').all().order_by('-datetime')
+        bills = billing.objects.select_related('customer', 'user').all().order_by('-datetime')
+
+        # Optional type filter: ?type=1 (retail), ?type=2 (wholesale), ?type=3 (hybrid)
+        bill_type_filter = request.query_params.get('type')
+        if bill_type_filter is not None:
+            try:
+                bills = bills.filter(bill_type=int(bill_type_filter))
+            except (ValueError, TypeError):
+                pass
         
         all_bills = []
-        for b in retail_bills:
+        for b in bills:
             all_bills.append({
                 "id": b.id,
                 "bill_number": b.bill_number,
@@ -121,26 +126,10 @@ class BillingViewSet(viewsets.ViewSet):
                 "user": b.user.id if b.user else None,
                 "phonenumber": b.phonenumber,
                 "datetime": b.datetime,
-                "type": 1,
+                "type": b.bill_type,
                 "grandtotal": b.grandtotal,
                 "paymentmode": b.paymentmode,
             })
-        for b in wholesale_bills:
-            all_bills.append({
-                "id": b.id,
-                "bill_number": b.bill_number,
-                "customer": b.customer.id if b.customer else None,
-                "customer_name": b.customer.name if b.customer else "Walk-in",
-                "user": b.user.id if b.user else None,
-                "phonenumber": b.phonenumber,
-                "datetime": b.datetime,
-                "type": 2,
-                "grandtotal": b.grandtotal,
-                "paymentmode": b.paymentmode,
-            })
-        
-        # Sort combined by datetime descending
-        all_bills.sort(key=lambda x: x["datetime"], reverse=True)
         return Response(all_bills)
 
     @action(detail=False, methods=['post'])
@@ -149,14 +138,13 @@ class BillingViewSet(viewsets.ViewSet):
         customer_data = data.get('customer', {})
         items_data = data.get('items', [])
         user_id = data.get('user_id')
-        bill_type = data.get('type', 1)  # 1: retail, 2: wholesale
+        bill_type = data.get('type', 1)  # 1: retail, 2: wholesale, 3: hybrid
         paymentmode = data.get('paymentmode', 'cash')
         grandtotal = data.get('grandtotal', 0.00)
         phonenumber = data.get('phonenumber', customer_data.get('phone', ''))
 
         try:
             with transaction.atomic():
-                # 1. Customer
                 phone = customer_data.get('phone')
                 cust = None
                 if phone:
@@ -181,7 +169,6 @@ class BillingViewSet(viewsets.ViewSet):
                         type=bill_type
                     )
 
-                # 2. User (Biller)
                 biller = None
                 if isinstance(request.user, User):
                     biller = request.user
@@ -190,25 +177,15 @@ class BillingViewSet(viewsets.ViewSet):
                 if not biller:
                     biller = User.objects.first()
 
-                # 3. Create Billing Header
-                if bill_type == 1:
-                    bill = retail_billing.objects.create(
-                        customer=cust,
-                        user=biller,
-                        phonenumber=phonenumber or phone or '',
-                        grandtotal=grandtotal,
-                        paymentmode=paymentmode
-                    )
-                else:
-                    bill = wholesale_billing.objects.create(
-                        customer=cust,
-                        user=biller,
-                        phonenumber=phonenumber or phone or '',
-                        grandtotal=grandtotal,
-                        paymentmode=paymentmode
-                    )
+                bill = billing.objects.create(
+                    customer=cust,
+                    user=biller,
+                    phonenumber=phonenumber or phone or '',
+                    grandtotal=grandtotal,
+                    paymentmode=paymentmode,
+                    bill_type=bill_type
+                )
 
-                # 4. Process Items
                 for item in items_data:
                     prod_id = item.get('product_id')
                     qty = int(item.get('quantity', 1))
@@ -216,27 +193,17 @@ class BillingViewSet(viewsets.ViewSet):
                     line_total = item.get('line_total', 0.00)
 
                     prod = product.objects.get(id=prod_id)
-                    
                     if prod.stock is not None:
                         prod.stock = max(0, prod.stock - qty)
                         prod.save()
 
-                    if bill_type == 1:
-                        retail_billing_product_mapping.objects.create(
-                            product_id=prod,
-                            billing_id=bill,
-                            quantity=qty,
-                            unit_price=unit_price,
-                            line_total=line_total
-                        )
-                    else:
-                        wholesale_billing_product_mapping.objects.create(
-                            product_id=prod,
-                            billing_id=bill,
-                            quantity=qty,
-                            unit_price=unit_price,
-                            line_total=line_total
-                        )
+                    billing_product_mapping.objects.create(
+                        product_id=prod,
+                        billing_id=bill,
+                        quantity=qty,
+                        unit_price=unit_price,
+                        line_total=line_total
+                    )
 
                 return Response({"message": "Bill created successfully", "bill_number": bill.bill_number, "bill_id": bill.id}, status=201)
 
@@ -249,19 +216,9 @@ class BillingViewSet(viewsets.ViewSet):
         if not bill_number:
             return Response({"error": "bill_number is required"}, status=400)
             
-        is_retail = bill_number.startswith('R')
-        is_wholesale = bill_number.startswith('W')
-        
-        if not is_retail and not is_wholesale:
-            return Response({"error": "Invalid bill_number format"}, status=400)
-            
         try:
-            if is_retail:
-                bill = retail_billing.objects.get(bill_number=bill_number)
-                items_mapping = retail_billing_product_mapping.objects.filter(billing_id=bill).select_related('product_id')
-            else:
-                bill = wholesale_billing.objects.get(bill_number=bill_number)
-                items_mapping = wholesale_billing_product_mapping.objects.filter(billing_id=bill).select_related('product_id')
+            bill = billing.objects.get(bill_number=bill_number)
+            items_mapping = billing_product_mapping.objects.filter(billing_id=bill).select_related('product_id')
                 
             items = []
             for mapping in items_mapping:
@@ -288,7 +245,7 @@ class BillingViewSet(viewsets.ViewSet):
                 },
                 "items": items
             })
-        except (retail_billing.DoesNotExist, wholesale_billing.DoesNotExist):
+        except billing.DoesNotExist:
             return Response({"error": "Bill not found"}, status=404)
         except Exception as e:
             return Response({"error": str(e)}, status=400)
@@ -299,20 +256,10 @@ class BillingViewSet(viewsets.ViewSet):
         if not bill_number:
             return Response({"error": "bill_number is required"}, status=400)
             
-        is_retail = bill_number.startswith('R')
-        is_wholesale = bill_number.startswith('W')
-        
-        if not is_retail and not is_wholesale:
-            return Response({"error": "Invalid bill_number format"}, status=400)
-            
         try:
             with transaction.atomic():
-                if is_retail:
-                    bill = retail_billing.objects.get(bill_number=bill_number)
-                    mappings = retail_billing_product_mapping.objects.filter(billing_id=bill)
-                else:
-                    bill = wholesale_billing.objects.get(bill_number=bill_number)
-                    mappings = wholesale_billing_product_mapping.objects.filter(billing_id=bill)
+                bill = billing.objects.get(bill_number=bill_number)
+                mappings = billing_product_mapping.objects.filter(billing_id=bill)
                     
                 for mapping in mappings:
                     prod = mapping.product_id
@@ -323,7 +270,7 @@ class BillingViewSet(viewsets.ViewSet):
                 bill.delete()
                 
             return Response({"message": "Bill deleted successfully"}, status=200)
-        except (retail_billing.DoesNotExist, wholesale_billing.DoesNotExist):
+        except billing.DoesNotExist:
             return Response({"error": "Bill not found"}, status=404)
         except Exception as e:
             return Response({"error": str(e)}, status=400)
@@ -335,12 +282,6 @@ class BillingViewSet(viewsets.ViewSet):
         if not bill_number:
             return Response({"error": "bill_number is required"}, status=400)
             
-        is_retail = bill_number.startswith('R')
-        is_wholesale = bill_number.startswith('W')
-        
-        if not is_retail and not is_wholesale:
-            return Response({"error": "Invalid bill_number format"}, status=400)
-            
         customer_data = data.get('customer', {})
         items_data = data.get('items', [])
         paymentmode = data.get('paymentmode', 'cash')
@@ -349,12 +290,8 @@ class BillingViewSet(viewsets.ViewSet):
 
         try:
             with transaction.atomic():
-                if is_retail:
-                    bill = retail_billing.objects.get(bill_number=bill_number)
-                    mappings = retail_billing_product_mapping.objects.filter(billing_id=bill)
-                else:
-                    bill = wholesale_billing.objects.get(bill_number=bill_number)
-                    mappings = wholesale_billing_product_mapping.objects.filter(billing_id=bill)
+                bill = billing.objects.get(bill_number=bill_number)
+                mappings = billing_product_mapping.objects.filter(billing_id=bill)
                     
                 for mapping in mappings:
                     prod = mapping.product_id
@@ -387,71 +324,47 @@ class BillingViewSet(viewsets.ViewSet):
                     line_total = item.get('line_total', 0.00)
 
                     prod = product.objects.get(id=prod_id)
-                    
                     if prod.stock is not None:
                         prod.stock = max(0, prod.stock - qty)
                         prod.save()
 
-                    if is_retail:
-                        retail_billing_product_mapping.objects.create(
-                            product_id=prod,
-                            billing_id=bill,
-                            quantity=qty,
-                            unit_price=unit_price,
-                            line_total=line_total
-                        )
-                    else:
-                        wholesale_billing_product_mapping.objects.create(
-                            product_id=prod,
-                            billing_id=bill,
-                            quantity=qty,
-                            unit_price=unit_price,
-                            line_total=line_total
-                        )
+                    billing_product_mapping.objects.create(
+                        product_id=prod,
+                        billing_id=bill,
+                        quantity=qty,
+                        unit_price=unit_price,
+                        line_total=line_total
+                    )
                         
             return Response({"message": "Bill updated successfully", "bill_number": bill.bill_number}, status=200)
-        except (retail_billing.DoesNotExist, wholesale_billing.DoesNotExist):
+        except billing.DoesNotExist:
             return Response({"error": "Bill not found"}, status=404)
         except Exception as e:
             return Response({"error": str(e)}, status=400)
 
     @action(detail=False, methods=['get'])
     def daily_sales(self, request):
-        retail_bills = retail_billing.objects.all().prefetch_related('retail_billing_product_mapping_set__product_id')
-        wholesale_bills = wholesale_billing.objects.all().prefetch_related('wholesale_billing_product_mapping_set__product_id')
+        bills_qs = billing.objects.all().prefetch_related('items_mapping__product_id')
         
         daily_data = {}
+        type_names = {1: "Retail", 2: "Wholesale", 3: "Hybrid"}
         
-        for b in retail_bills:
+        for b in bills_qs:
             date_str = b.datetime.date().strftime("%Y-%m-%d")
-            key = (date_str, "Retail")
+            sale_type_name = type_names.get(b.bill_type, "Retail")
+            key = (date_str, sale_type_name)
             cost = 0.00
-            for mapping in b.retail_billing_product_mapping_set.all():  # type: ignore
+            for mapping in b.items_mapping.all():
                 qty = mapping.quantity
                 purchase_price = float(mapping.product_id.purchaseprice) if mapping.product_id else 0.00
                 cost += qty * purchase_price
                 
             if key not in daily_data:
-                daily_data[key] = {"date": date_str, "saleType": "Retail", "totalBills": 0, "totalSale": 0.00, "totalCost": 0.00}
+                daily_data[key] = {"date": date_str, "saleType": sale_type_name, "totalBills": 0, "totalSale": 0.00, "totalCost": 0.00}
             daily_data[key]["totalBills"] += 1
             daily_data[key]["totalSale"] += float(b.grandtotal)
             daily_data[key]["totalCost"] += cost
 
-        for b in wholesale_bills:
-            date_str = b.datetime.date().strftime("%Y-%m-%d")
-            key = (date_str, "Wholesale")
-            cost = 0.00
-            for mapping in b.wholesale_billing_product_mapping_set.all():  # type: ignore
-                qty = mapping.quantity
-                purchase_price = float(mapping.product_id.purchaseprice) if mapping.product_id else 0.00
-                cost += qty * purchase_price
-                
-            if key not in daily_data:
-                daily_data[key] = {"date": date_str, "saleType": "Wholesale", "totalBills": 0, "totalSale": 0.00, "totalCost": 0.00}
-            daily_data[key]["totalBills"] += 1
-            daily_data[key]["totalSale"] += float(b.grandtotal)
-            daily_data[key]["totalCost"] += cost
-            
         return Response(list(daily_data.values()))
 
     @action(detail=False, methods=['get'])
@@ -459,28 +372,23 @@ class BillingViewSet(viewsets.ViewSet):
         today = timezone.localtime().date()
         
         # 1. Today's Revenue
-        retail_rev = retail_billing.objects.filter(datetime__date=today).aggregate(revenue=Sum('grandtotal'))['revenue'] or 0.00
-        wholesale_rev = wholesale_billing.objects.filter(datetime__date=today).aggregate(revenue=Sum('grandtotal'))['revenue'] or 0.00
-        today_revenue = retail_rev + wholesale_rev
+        today_revenue = billing.objects.filter(datetime__date=today).aggregate(revenue=Sum('grandtotal'))['revenue'] or 0.00
 
         # 2. Today's Sales Count
-        today_sales_count = retail_billing.objects.filter(datetime__date=today).count() + wholesale_billing.objects.filter(datetime__date=today).count()
+        today_sales_count = billing.objects.filter(datetime__date=today).count()
 
-        # 3. Monthly Expenses (Sum of all logged expenses)
+        # 3. Monthly Expenses
         monthly_expenses = expense.objects.aggregate(total=Sum('amount'))['total'] or 0.00
 
         # 4. Active Customers
         customer_count = customer.objects.count()
 
         # 5. Recent Bills
-        recent_retail = list(retail_billing.objects.order_by('-datetime')[:5])
-        recent_wholesale = list(wholesale_billing.objects.order_by('-datetime')[:5])
-        
-        recent_bills_qs = sorted(recent_retail + recent_wholesale, key=lambda x: x.datetime, reverse=True)[:5]
+        recent_bills_qs = billing.objects.order_by('-datetime')[:5]
+        type_names = {1: "Retail", 2: "Wholesale", 3: "Hybrid"}
         
         recent_bills = []
         for b in recent_bills_qs:
-            is_retail = isinstance(b, retail_billing)
             recent_bills.append({
                 "id": b.id,
                 "billNo": b.bill_number,
@@ -488,7 +396,7 @@ class BillingViewSet(viewsets.ViewSet):
                 "phone": b.phonenumber,
                 "date": b.datetime.strftime("%d/%m/%Y %I:%M %p"),
                 "paymentMode": b.paymentmode,
-                "type": "Retail" if is_retail else "Wholesale",
+                "type": type_names.get(b.bill_type, "Retail"),
                 "total": float(b.grandtotal)
             })
 

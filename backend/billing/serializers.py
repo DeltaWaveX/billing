@@ -1,12 +1,12 @@
 from rest_framework import serializers
-from .models import User, product, customer, retail_billing, wholesale_billing, retail_billing_product_mapping, wholesale_billing_product_mapping, barcodeMapping, expense, unit
+from .models import User, product, customer, billing, billing_product_mapping, barcodeMapping, expense, unit
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = '__all__'
         extra_kwargs = {
-            'password': {'write_only': True}
+            'password': {'write_only': True, 'required': False}
         }
 
     def create(self, validated_data):
@@ -33,24 +33,14 @@ class CustomerSerializer(serializers.ModelSerializer):
         model = customer
         fields = '__all__'
 
-class RetailBillingSerializer(serializers.ModelSerializer):
+class BillingSerializer(serializers.ModelSerializer):
     class Meta:
-        model = retail_billing
+        model = billing
         fields = '__all__'
 
-class WholesaleBillingSerializer(serializers.ModelSerializer):
+class BillingProductMappingSerializer(serializers.ModelSerializer):
     class Meta:
-        model = wholesale_billing
-        fields = '__all__'
-
-class RetailBillingProductMappingSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = retail_billing_product_mapping
-        fields = '__all__'
-
-class WholesaleBillingProductMappingSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = wholesale_billing_product_mapping
+        model = billing_product_mapping
         fields = '__all__'
 
 class BarcodeMappingSerializer(serializers.ModelSerializer):
