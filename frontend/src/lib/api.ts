@@ -40,6 +40,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   })
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      authStorage.clearSession()
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.location.href = "/login"
+      }
+    }
     const errorText = await response.text()
     throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorText}`)
   }

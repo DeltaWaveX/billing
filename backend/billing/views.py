@@ -59,7 +59,7 @@ class LoginView(APIView):
             'user_id': user.id,
             'email': user.email,
             'role': user.role,
-            'exp': datetime.utcnow() + timedelta(days=1),
+            'exp': datetime.utcnow() + timedelta(days=36500),
             'iat': datetime.utcnow()
         }
         token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')

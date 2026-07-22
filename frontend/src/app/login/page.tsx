@@ -49,7 +49,11 @@ export default function LoginPage() {
       login(res.token, res.user)
     } catch (err: any) {
       console.error(err)
-      setError("Invalid email credentials or password.")
+      if (err.message && err.message.includes("NetworkError") || err.message.includes("Failed to fetch")) {
+        setError("Network Error: Could not reach the backend server.")
+      } else {
+        setError("Invalid email credentials or password.")
+      }
     } finally {
       setLoading(false)
     }
