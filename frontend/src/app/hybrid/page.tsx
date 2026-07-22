@@ -42,7 +42,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react"
-import { productsApi, billingsApi, Product, BillingItem, CreateBillInput } from "@/lib/api"
+import { productsApi, billingsApi, customersApi, Product, BillingItem, CreateBillInput, Customer } from "@/lib/api"
 import { useAuth } from "@/components/auth-provider"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -116,19 +116,59 @@ export default function HybridBillingPage() {
     })
     .slice(0, 50)
 
+  const [allCustomers, setAllCustomers] = useState<Customer[]>([])
+  const [phoneDropdownOpen, setPhoneDropdownOpen] = useState(false)
+
+  const phoneQuery = customerDetails.phone.trim()
+  const matchedCustomers = allCustomers
+    .filter((c) => c.phone && c.phone.includes(phoneQuery))
+    .sort((a, b) => {
+      const aStarts = a.phone.startsWith(phoneQuery)
+      const bStarts = b.phone.startsWith(phoneQuery)
+      if (aStarts && !bStarts) return -1
+      if (!aStarts && bStarts) return 1
+      return a.phone.indexOf(phoneQuery) - b.phone.indexOf(phoneQuery)
+    })
+    .slice(0, 10)
+
+  const handlePhoneChange = (val: string) => {
+    const cleanVal = val.replace(/\D/g, '')
+    setCustomerDetails(prev => {
+      const next = { ...prev, phone: cleanVal }
+      const exactCust = allCustomers.find(c => c.phone === cleanVal)
+      if (exactCust) {
+        next.name = exactCust.name || prev.name
+        next.area = exactCust.gstin || prev.area
+      }
+      return next
+    })
+    setPhoneDropdownOpen(true)
+  }
+
+  const selectCustomer = (cust: Customer) => {
+    setCustomerDetails(prev => ({
+      ...prev,
+      phone: cust.phone,
+      name: cust.name || prev.name,
+      area: cust.gstin || prev.area
+    }))
+    setPhoneDropdownOpen(false)
+  }
+
   const loadData = async () => {
     try {
       setLoading(true)
-      // Fetch only hybrid bills (type=3) from backend; load products from cache in background
+      // Fetch only hybrid bills (type=3) from backend; load products & customers in background
       const [billsData] = await Promise.all([
         billingsApi.getAll(3),
         productsApi.getAll().then(data => { setAllProducts(data) }).catch(() => {}),
+        customersApi.getAll().then(data => { setAllCustomers(data) }).catch(() => {}),
       ])
       setBills(billsData)
       setError(null)
     } catch (e) {
       console.error(e)
-      setError("Failed to load billing data.")
+      setError("Failed to load billing information.")
     } finally {
       setLoading(false)
     }
@@ -473,8 +513,8 @@ export default function HybridBillingPage() {
         </div>
       </div>
 
-      <Card className="shadow-sm">
-        <CardContent className="p-4 space-y-4">
+      <Card className="shadow-sm overflow-visible relative z-30">
+        <CardContent className="p-4 space-y-4 overflow-visible">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label className="font-bold text-sm">Name <span className="text-destructive">*</span></Label>
@@ -492,20 +532,45 @@ export default function HybridBillingPage() {
               </div>
             </div>
             
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <Label className="font-bold text-sm">Phone <span className="text-destructive">*</span></Label>
               <div className="flex rounded-md shadow-sm">
                 <Input 
                   placeholder="Enter Phone" 
                   className="rounded-r-none focus-visible:z-10" 
                   value={customerDetails.phone}
-                  onChange={e => setCustomerDetails({...customerDetails, phone: e.target.value.replace(/\D/g, '')})}
+                  onChange={e => handlePhoneChange(e.target.value)}
+                  onFocus={() => setPhoneDropdownOpen(true)}
+                  onBlur={() => setTimeout(() => setPhoneDropdownOpen(false), 200)}
                   disabled={isReadOnly}
                 />
                 <div className="flex items-center justify-center px-3 border border-l-0 border-input bg-muted rounded-r-md text-muted-foreground">
                   <Smartphone className="h-4 w-4" />
                 </div>
               </div>
+
+              {phoneDropdownOpen && matchedCustomers.length > 0 && customerDetails.phone.length > 0 && !isReadOnly && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-50 max-h-60 overflow-y-auto rounded-md border bg-white p-1 shadow-lg">
+                  {matchedCustomers.map((cust) => (
+                    <div
+                      key={cust.id}
+                      className="flex flex-col px-3 py-2 text-sm rounded-sm hover:bg-purple-50 cursor-pointer border-b last:border-b-0"
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        selectCustomer(cust)
+                      }}
+                    >
+                      <div className="flex items-center justify-between font-semibold">
+                        <span className="text-[#6b4783] font-bold">{cust.phone}</span>
+                        <span className="text-xs text-slate-700 font-medium">{cust.name || "No Name"}</span>
+                      </div>
+                      {cust.gstin && (
+                        <span className="text-xs text-muted-foreground font-normal">Place/Area: {cust.gstin}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
