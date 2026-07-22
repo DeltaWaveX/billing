@@ -169,30 +169,43 @@ export default function UsersPage() {
     }
   }
 
-  const filteredUsers = users.filter((u) => {
-    const fullName = `${u.fist_name} ${u.last_name}`.toLowerCase()
-    return fullName.includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase())
-  })
+  const uQuery = searchQuery.trim().toLowerCase()
+  const filteredUsers = users
+    .filter((u) => {
+      if (!uQuery) return true
+      const fullName = `${u.fist_name} ${u.last_name}`.toLowerCase()
+      return fullName.includes(uQuery) || u.email.toLowerCase().includes(uQuery)
+    })
+    .sort((a, b) => {
+      if (!uQuery) return 0
+      const aName = `${a.fist_name} ${a.last_name}`.toLowerCase()
+      const bName = `${b.fist_name} ${b.last_name}`.toLowerCase()
+      const aStarts = aName.startsWith(uQuery) || a.email.toLowerCase().startsWith(uQuery)
+      const bStarts = bName.startsWith(uQuery) || b.email.toLowerCase().startsWith(uQuery)
+      if (aStarts && !bStarts) return -1
+      if (!aStarts && bStarts) return 1
+      return aName.indexOf(uQuery) - bName.indexOf(uQuery)
+    })
 
   return (
     <div className="flex-1 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Users</h2>
           <p className="text-muted-foreground">Manage staff access and roles.</p>
         </div>
-        <Button onClick={openAddDialog} className="gap-2 bg-green-600 hover:bg-green-700 text-white">
+        <Button onClick={openAddDialog} className="gap-2 bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto">
           <Plus className="h-4 w-4" />
           Add New User
         </Button>
       </div>
 
-      <div className="flex items-center justify-between gap-4 py-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 py-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search users..."
-            className="pl-8"
+            className="pl-8 w-full"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -209,8 +222,8 @@ export default function UsersPage() {
       ) : error ? (
         <div className="p-6 text-center text-destructive font-medium bg-red-50 rounded-md">{error}</div>
       ) : (
-        <div className="rounded-md border bg-white overflow-hidden shadow-sm">
-          <Table>
+        <div className="rounded-md border bg-white overflow-x-auto shadow-sm">
+          <Table className="min-w-[650px]">
             <TableHeader className="bg-muted/50">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="font-medium w-[50px]">#</TableHead>

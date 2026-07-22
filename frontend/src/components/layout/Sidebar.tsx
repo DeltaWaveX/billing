@@ -46,7 +46,7 @@ const navItems = [
   },
 ]
 
-export function Sidebar() {
+export function Sidebar({ onNavClick }: { onNavClick?: () => void } = {}) {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const [reportsOpen, setReportsOpen] = useState(true)
@@ -65,7 +65,7 @@ export function Sidebar() {
     <div className="flex h-full w-64 flex-col border-r bg-muted/40 justify-between">
       <div>
         <div className="flex h-14 items-center border-b px-6">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
+          <Link href="/" onClick={onNavClick} className="flex items-center gap-2 font-semibold">
             <Package className="h-6 w-6 text-[#6b4783]" />
             <span className="text-[#6b4783]">BillingSystem</span>
           </Link>
@@ -97,6 +97,7 @@ export function Sidebar() {
                           <Link
                             key={childIndex}
                             href={child.href}
+                            onClick={onNavClick}
                             className={cn(
                               "flex items-center rounded-lg px-3 py-1.5 text-muted-foreground transition-all hover:text-[#6b4783] hover:bg-slate-100",
                               pathname === child.href ? "bg-slate-100 text-[#6b4783] font-semibold" : ""
@@ -116,6 +117,7 @@ export function Sidebar() {
                 <Link
                   key={index}
                   href={item.href}
+                  onClick={onNavClick}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-[#6b4783] hover:bg-slate-100",
                     isActive ? "bg-slate-100 text-[#6b4783] font-semibold" : ""

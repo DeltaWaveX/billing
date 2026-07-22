@@ -79,8 +79,8 @@ export default function RetailReportPage() {
       ) : error ? (
         <div className="p-6 text-center text-destructive font-medium bg-red-50 rounded-md">{error}</div>
       ) : (
-        <div className="rounded-md border bg-white overflow-hidden shadow-sm mt-4">
-          <Table>
+        <div className="rounded-md border bg-white overflow-x-auto shadow-sm mt-4">
+          <Table className="min-w-[650px]">
             <TableHeader className="bg-muted/50 border-b">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="font-bold text-foreground">Bill ID</TableHead>

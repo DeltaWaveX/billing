@@ -23,7 +23,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { cn } from "@/lib/utils"
-import { Edit, Ban, Check, Plus, ArrowLeft, Search, Eye, Trash2, User, Smartphone, MapPin, RefreshCw, ChevronsUpDown } from "lucide-react"
+import { Edit, Ban, Check, Plus, ArrowLeft, Search, Eye, Trash2, User, Smartphone, MapPin, RefreshCw, ChevronsUpDown, ChevronLeft, ChevronRight, Printer } from "lucide-react"
 import { billingsApi, productsApi, CreateBillInput, Product } from "@/lib/api"
 import { useAuth } from "@/components/auth-provider"
 
@@ -49,6 +49,8 @@ export default function RetailBilling() {
   // Cart/Billing state
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 20
   const [customerDetails, setCustomerDetails] = useState({ name: '', phone: '', area: '', paymentMode: 'cash' })
   const [editingBillNumber, setEditingBillNumber] = useState<string | null>(null)
   const [isReadOnly, setIsReadOnly] = useState(false)
@@ -60,10 +62,24 @@ export default function RetailBilling() {
   const [productComboboxOpen, setProductComboboxOpen] = useState(false)
   const [productSearch, setProductSearch] = useState("")
 
-  const filteredProductsForDropdown = allProducts.filter(p => 
-    p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-    (p as any).barcode?.includes(productSearch)
-  ).slice(0, 50)
+  const pQuery = productSearch.trim().toLowerCase()
+  const filteredProductsForDropdown = allProducts
+    .filter(p => 
+      !pQuery ||
+      p.name.toLowerCase().includes(pQuery) || 
+      String((p as any).barcode || "").toLowerCase().includes(pQuery)
+    )
+    .sort((a, b) => {
+      if (!pQuery) return 0
+      const aName = a.name.toLowerCase()
+      const bName = b.name.toLowerCase()
+      const aStarts = aName.startsWith(pQuery)
+      const bStarts = bName.startsWith(pQuery)
+      if (aStarts && !bStarts) return -1
+      if (!aStarts && bStarts) return 1
+      return aName.indexOf(pQuery) - bName.indexOf(pQuery)
+    })
+    .slice(0, 50)
 
   const loadData = async () => {
     try {
@@ -234,35 +250,53 @@ export default function RetailBilling() {
 
   const cartTotal = cartItems.reduce((sum, item) => sum + item.line_total, 0)
 
-  const filteredBills = bills.filter(
-    (b) =>
-      b.bill_number?.startsWith("R") &&
-      ((b.customer_name && b.customer_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      b.phonenumber.includes(searchQuery) ||
-      String(b.id).includes(searchQuery))
-  )
+  const bQuery = searchQuery.trim().toLowerCase()
+  const filteredBills = bills
+    .filter(
+      (b) =>
+        b.bill_number?.startsWith("R") &&
+        (!bQuery ||
+        (b.customer_name && b.customer_name.toLowerCase().includes(bQuery)) ||
+        b.phonenumber.includes(bQuery) ||
+        String(b.bill_number).toLowerCase().includes(bQuery) ||
+        String(b.id).includes(bQuery))
+    )
+    .sort((a, b) => {
+      if (!bQuery) return 0
+      const aName = (a.customer_name || a.bill_number || "").toLowerCase()
+      const bName = (b.customer_name || b.bill_number || "").toLowerCase()
+      const aStarts = aName.startsWith(bQuery) || String(a.phonenumber).startsWith(bQuery)
+      const bStarts = bName.startsWith(bQuery) || String(b.phonenumber).startsWith(bQuery)
+      if (aStarts && !bStarts) return -1
+      if (!aStarts && bStarts) return 1
+      return aName.indexOf(bQuery) - bName.indexOf(bQuery)
+    })
+
+  const totalPages = Math.max(1, Math.ceil(filteredBills.length / ITEMS_PER_PAGE))
+  const safePage = Math.min(currentPage, totalPages)
+  const paginatedBills = filteredBills.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE)
 
   if (viewMode === 'list') {
     return (
       <div className="flex-1 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold tracking-tight">List of Retails Estimation Bills</h2>
             <p className="text-muted-foreground">View and manage retail bills.</p>
           </div>
-          <Button onClick={startNewBill} className="gap-2 bg-[#6b4783] hover:bg-[#563969] text-white">
+          <Button onClick={startNewBill} className="gap-2 bg-[#6b4783] hover:bg-[#563969] text-white w-full sm:w-auto">
             <Plus className="h-4 w-4" /> Add New Bill
           </Button>
         </div>
 
-        <div className="flex items-center justify-between gap-4 py-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 py-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search by customer name, phone, or bill number..."
-              className="pl-8"
+              className="pl-8 w-full"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1) }}
             />
           </div>
           <Button variant="outline" onClick={loadData} className="gap-2">
@@ -277,8 +311,8 @@ export default function RetailBilling() {
         ) : error ? (
           <div className="p-6 text-center text-destructive font-medium bg-red-50 rounded-md">{error}</div>
         ) : (
-          <div className="rounded-md border bg-white overflow-hidden shadow-sm">
-            <Table>
+          <div className="rounded-md border bg-white overflow-x-auto shadow-sm">
+            <Table className="min-w-[700px]">
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="font-medium w-[50px]">#</TableHead>
@@ -292,13 +326,13 @@ export default function RetailBilling() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredBills.length > 0 ? (
-                  filteredBills.map((bill, index) => (
+                {paginatedBills.length > 0 ? (
+                  paginatedBills.map((bill, index) => (
                     <TableRow key={bill.id} className="hover:bg-muted/30">
-                      <TableCell className="font-medium">{index + 1}</TableCell>
+                      <TableCell className="font-medium">{(safePage - 1) * ITEMS_PER_PAGE + index + 1}</TableCell>
                       <TableCell className="text-muted-foreground font-bold">{bill.bill_number}</TableCell>
                       <TableCell className="font-bold">{bill.customer_name || "Walk-in"}</TableCell>
-                      <TableCell className="text-blue-600 font-semibold">{bill.phonenumber}</TableCell>
+                      <TableCell>{bill.phonenumber}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {new Date(bill.datetime).toLocaleString()}
                       </TableCell>
@@ -314,6 +348,9 @@ export default function RetailBilling() {
                           <Button onClick={() => loadBillForView(bill.bill_number, false)} variant="ghost" size="sm" className="h-8 w-8 p-0 text-amber-600 hover:text-amber-700 hover:bg-amber-50">
                             <Edit className="h-4 w-4" />
                           </Button>
+                          <Button onClick={() => window.open(`/print/${bill.bill_number}`, '_blank')} variant="ghost" size="sm" className="h-8 w-8 p-0 text-purple-600 hover:text-purple-700 hover:bg-purple-50">
+                            <Printer className="h-4 w-4" />
+                          </Button>
                           <Button onClick={() => handleDelete(bill.bill_number)} variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50">
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -328,6 +365,35 @@ export default function RetailBilling() {
                 )}
               </TableBody>
             </Table>
+          </div>
+        )}
+
+        {!loading && !error && filteredBills.length > ITEMS_PER_PAGE && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Showing {(safePage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(safePage * ITEMS_PER_PAGE, filteredBills.length)} of {filteredBills.length} bills
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                className="gap-1"
+              >
+                <ChevronLeft className="h-4 w-4" /> Previous
+              </Button>
+              <span className="text-sm font-medium px-2">Page {safePage} of {totalPages}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={safePage >= totalPages}
+                className="gap-1"
+              >
+                Next <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         )}
       </div>

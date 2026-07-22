@@ -28,10 +28,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Plus, Edit, Trash2, RefreshCw } from "lucide-react"
+import { Search, Plus, Edit, Trash2, RefreshCw, Lock } from "lucide-react"
 import { productsApi, barcodeMappingsApi, unitsApi, Product, BarcodeMapping, Unit } from "@/lib/api"
+import { useAuth } from "@/components/auth-provider"
 
 export default function ItemsPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 1
+
   const [searchQuery, setSearchQuery] = useState("")
   const [items, setItems] = useState<(Product & { barcode: string; barcodeId?: number })[]>([])
   const [units, setUnits] = useState<Unit[]>([])
@@ -212,8 +216,12 @@ export default function ItemsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!nameEn || !purchasePrice || !retailPrice || !wholesalePrice) {
-      alert("Please fill in all required fields.")
+    if (!nameEn) {
+      alert("Please enter the product name.")
+      return
+    }
+    if (isAdmin && (!purchasePrice || !retailPrice || !wholesalePrice)) {
+      alert("Please fill in all price fields.")
       return
     }
 
@@ -276,11 +284,24 @@ export default function ItemsPage() {
     }
   }
 
-  const filteredItems = items.filter(
-    (item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.barcode.includes(searchQuery)
-  )
+  const query = searchQuery.trim().toLowerCase()
+  const filteredItems = items
+    .filter(
+      (item) =>
+        !query ||
+        item.name.toLowerCase().includes(query) ||
+        item.barcode.toLowerCase().includes(query)
+    )
+    .sort((a, b) => {
+      if (!query) return 0
+      const aName = a.name.toLowerCase()
+      const bName = b.name.toLowerCase()
+      const aStarts = aName.startsWith(query) || a.barcode.toLowerCase().startsWith(query)
+      const bStarts = bName.startsWith(query) || b.barcode.toLowerCase().startsWith(query)
+      if (aStarts && !bStarts) return -1
+      if (!aStarts && bStarts) return 1
+      return aName.indexOf(query) - bName.indexOf(query)
+    })
 
   useEffect(() => {
     setCurrentPage(1)
@@ -294,23 +315,23 @@ export default function ItemsPage() {
 
   return (
     <div className="flex-1 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">List of Items</h2>
           <p className="text-muted-foreground">Manage your product inventory and pricing.</p>
         </div>
-        <Button onClick={openAddDialog} className="gap-2 bg-[#6b4783] hover:bg-[#563969] text-white">
+        <Button onClick={openAddDialog} className="gap-2 bg-[#6b4783] hover:bg-[#563969] text-white w-full sm:w-auto">
           <Plus className="h-4 w-4" />
           Add Item
         </Button>
       </div>
 
-      <div className="flex items-center justify-between gap-4 py-4">
-        <div className="relative w-72">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 py-4">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search items by name or barcode..."
-            className="pl-8"
+            className="pl-8 w-full"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -327,14 +348,14 @@ export default function ItemsPage() {
       ) : error ? (
         <div className="p-6 text-center text-destructive font-medium bg-red-50 rounded-md">{error}</div>
       ) : (
-        <div className="rounded-md border bg-white overflow-hidden shadow-sm">
-          <Table>
+        <div className="rounded-md border bg-white overflow-x-auto shadow-sm">
+          <Table className="min-w-[800px]">
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead className="w-[50px] text-center">#</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Units</TableHead>
-                <TableHead>P-Price</TableHead>
+                {isAdmin && <TableHead>P-Price</TableHead>}
                 <TableHead>Barcode Number</TableHead>
                 <TableHead>Stock</TableHead>
                 <TableHead>W-Price</TableHead>
@@ -349,7 +370,7 @@ export default function ItemsPage() {
                     <TableCell className="text-center font-medium">{(currentPage - 1) * itemsPerPage + index + 1}</TableCell>
                     <TableCell className="max-w-md font-bold whitespace-normal break-words">{item.name}</TableCell>
                     <TableCell>{item.unit}</TableCell>
-                    <TableCell>₹{parseFloat(String(item.purchaseprice)).toFixed(2)}</TableCell>
+                    {isAdmin && <TableCell>₹{parseFloat(String(item.purchaseprice)).toFixed(2)}</TableCell>}
                     <TableCell className="text-blue-600 font-semibold">{item.barcode}</TableCell>
                     <TableCell>{item.stock !== null ? item.stock : "Unlimited"}</TableCell>
                     <TableCell>₹{parseFloat(String(item.wholesaleprice)).toFixed(2)}</TableCell>
@@ -368,7 +389,7 @@ export default function ItemsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-6 text-muted-foreground">No products found.</TableCell>
+                  <TableCell colSpan={isAdmin ? 9 : 8} className="text-center py-6 text-muted-foreground">No products found.</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -524,15 +545,17 @@ export default function ItemsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="purchasePrice">Purchase Price (₹) <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="purchasePrice">Purchase Price (₹) {isAdmin && <span className="text-destructive">*</span>}</Label>
                   <Input 
                     id="purchasePrice" 
                     type="number" 
                     step="0.01"
-                    placeholder="0.00" 
+                    placeholder={isAdmin ? "0.00" : "Set by Admin"} 
                     value={purchasePrice}
                     onChange={(e) => handlePurchasePriceChange(e.target.value)}
-                    required 
+                    required={isAdmin}
+                    disabled={!isAdmin}
+                    className={!isAdmin ? "bg-muted text-muted-foreground cursor-not-allowed" : ""}
                   />
                 </div>
                 <div className="space-y-2">
@@ -540,9 +563,11 @@ export default function ItemsPage() {
                   <Input 
                     id="retailPercentage" 
                     type="number" 
-                    placeholder="e.g. 15" 
+                    placeholder={isAdmin ? "e.g. 15" : "Set by Admin"} 
                     value={retailPercentage}
                     onChange={(e) => handleRetailPercentageChange(e.target.value)}
+                    disabled={!isAdmin}
+                    className={!isAdmin ? "bg-muted text-muted-foreground cursor-not-allowed" : ""}
                   />
                 </div>
                 <div className="space-y-2">
@@ -550,39 +575,51 @@ export default function ItemsPage() {
                   <Input 
                     id="wholesalePercentage" 
                     type="number" 
-                    placeholder="e.g. 8" 
+                    placeholder={isAdmin ? "e.g. 8" : "Set by Admin"} 
                     value={wholesalePercentage}
                     onChange={(e) => handleWholesalePercentageChange(e.target.value)}
+                    disabled={!isAdmin}
+                    className={!isAdmin ? "bg-muted text-muted-foreground cursor-not-allowed" : ""}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="retailPrice">Calculated Retail Price (₹) <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="retailPrice">Calculated Retail Price (₹) {isAdmin && <span className="text-destructive">*</span>}</Label>
                   <Input 
                     id="retailPrice" 
                     type="number" 
                     step="0.01"
-                    placeholder="0.00" 
+                    placeholder={isAdmin ? "0.00" : "Set by Admin"} 
                     value={retailPrice}
                     onChange={(e) => setRetailPrice(e.target.value)}
-                    required 
+                    required={isAdmin}
+                    disabled={!isAdmin}
+                    className={!isAdmin ? "bg-muted text-muted-foreground cursor-not-allowed" : ""}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="wholesalePrice">Calculated Wholesale Price (₹) <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="wholesalePrice">Calculated Wholesale Price (₹) {isAdmin && <span className="text-destructive">*</span>}</Label>
                   <Input 
                     id="wholesalePrice" 
                     type="number" 
                     step="0.01"
-                    placeholder="0.00" 
+                    placeholder={isAdmin ? "0.00" : "Set by Admin"} 
                     value={wholesalePrice}
                     onChange={(e) => setWholesalePrice(e.target.value)}
-                    required 
+                    required={isAdmin}
+                    disabled={!isAdmin}
+                    className={!isAdmin ? "bg-muted text-muted-foreground cursor-not-allowed" : ""}
                   />
                 </div>
               </div>
+
+              {!isAdmin && (
+                <p className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                  <Lock className="h-3.5 w-3.5" /> Note: Pricing fields are locked for Billers. An Administrator will set prices from the Dashboard.
+                </p>
+              )}
             </div>
             <DialogFooter className="sm:justify-center">
               <Button type="submit" className="px-8 bg-[#6b4783] hover:bg-[#563969] text-white">Submit</Button>

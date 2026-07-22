@@ -133,31 +133,44 @@ export default function CustomersPage() {
     }
   }
 
-  const filteredCustomers = customers.filter(
-    (c) =>
-      (c.name && c.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      c.phone.includes(searchQuery)
-  )
+  const cQuery = searchQuery.trim().toLowerCase()
+  const filteredCustomers = customers
+    .filter(
+      (c) =>
+        !cQuery ||
+        (c.name && c.name.toLowerCase().includes(cQuery)) ||
+        (c.phone && c.phone.includes(cQuery))
+    )
+    .sort((a, b) => {
+      if (!cQuery) return 0
+      const aName = (a.name || "").toLowerCase()
+      const bName = (b.name || "").toLowerCase()
+      const aStarts = aName.startsWith(cQuery) || String(a.phone || "").startsWith(cQuery)
+      const bStarts = bName.startsWith(cQuery) || String(b.phone || "").startsWith(cQuery)
+      if (aStarts && !bStarts) return -1
+      if (!aStarts && bStarts) return 1
+      return aName.indexOf(cQuery) - bName.indexOf(cQuery)
+    })
 
   return (
     <div className="flex-1 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Customers</h2>
           <p className="text-muted-foreground">Manage your retail and wholesale customers.</p>
         </div>
-        <Button onClick={openAddDialog} className="gap-2 bg-[#6b4783] hover:bg-[#563969] text-white">
+        <Button onClick={openAddDialog} className="gap-2 bg-[#6b4783] hover:bg-[#563969] text-white w-full sm:w-auto">
           <Plus className="h-4 w-4" />
           Add Customer
         </Button>
       </div>
 
-      <div className="flex items-center justify-between gap-4 py-4">
-        <div className="relative w-72">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 py-4">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search customers by name or phone..."
-            className="pl-8"
+            className="pl-8 w-full"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -174,8 +187,8 @@ export default function CustomersPage() {
       ) : error ? (
         <div className="p-6 text-center text-destructive font-medium bg-red-50 rounded-md">{error}</div>
       ) : (
-        <div className="rounded-md border bg-white overflow-hidden shadow-sm">
-          <Table>
+        <div className="rounded-md border bg-white overflow-x-auto shadow-sm">
+          <Table className="min-w-[650px]">
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead>#</TableHead>

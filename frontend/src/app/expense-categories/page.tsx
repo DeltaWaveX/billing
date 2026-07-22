@@ -71,11 +71,24 @@ export default function ExpenseCategoriesPage() {
     loadCategories()
   }, [])
 
-  const filteredCategories = categories.filter(
-    (cat) =>
-      cat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      cat.description.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const catQuery = searchQuery.trim().toLowerCase()
+  const filteredCategories = categories
+    .filter(
+      (cat) =>
+        !catQuery ||
+        cat.name.toLowerCase().includes(catQuery) ||
+        cat.description.toLowerCase().includes(catQuery)
+    )
+    .sort((a, b) => {
+      if (!catQuery) return 0
+      const aName = a.name.toLowerCase()
+      const bName = b.name.toLowerCase()
+      const aStarts = aName.startsWith(catQuery)
+      const bStarts = bName.startsWith(catQuery)
+      if (aStarts && !bStarts) return -1
+      if (!aStarts && bStarts) return 1
+      return aName.indexOf(catQuery) - bName.indexOf(catQuery)
+    })
 
   if (loading) {
     return (
@@ -94,20 +107,20 @@ export default function ExpenseCategoriesPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-4 py-2">
-        <div className="relative w-72">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 py-2">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search categories..."
-            className="pl-8"
+            className="pl-8 w-full"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="rounded-md border bg-white overflow-hidden shadow-sm mt-4">
-        <Table>
+      <div className="rounded-md border bg-white overflow-x-auto shadow-sm mt-4">
+        <Table className="min-w-[500px]">
           <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead>Category Name</TableHead>

@@ -3,20 +3,55 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { PlusCircle, ShoppingCart, Truck, IndianRupee, Users, PackageOpen, TrendingUp, TrendingDown, RefreshCw } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { PlusCircle, ShoppingCart, Truck, IndianRupee, Users, PackageOpen, TrendingUp, TrendingDown, RefreshCw, Tag, AlertCircle, Check, Search } from "lucide-react"
 import Link from "next/link"
-import { billingsApi, DashboardStats } from "@/lib/api"
+import { billingsApi, productsApi, DashboardStats, Product } from "@/lib/api"
+import { useAuth } from "@/components/auth-provider"
 
 export default function Dashboard() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 1
+
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [pendingProducts, setPendingProducts] = useState<Product[]>([])
+  const [pendingSearchQuery, setPendingSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Quick Price Modal State for Admins
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [purchasePrice, setPurchasePrice] = useState("")
+  const [retailPercentage, setRetailPercentage] = useState("")
+  const [wholesalePercentage, setWholesalePercentage] = useState("")
+  const [retailPrice, setRetailPrice] = useState("")
+  const [wholesalePrice, setWholesalePrice] = useState("")
+  const [savingPrice, setSavingPrice] = useState(false)
 
   const fetchStats = async () => {
     try {
       setLoading(true)
-      const data = await billingsApi.getDashboardStats()
-      setStats(data)
+      const [statsData, productsData] = await Promise.all([
+        billingsApi.getDashboardStats(),
+        productsApi.getAll(true)
+      ])
+      setStats(statsData)
+      
+      // Filter unpriced products (purchaseprice === 0 or retailprice === 0)
+      const unpriced = productsData.filter(p => 
+        !parseFloat(String(p.retailprice)) || !parseFloat(String(p.purchaseprice))
+      )
+      setPendingProducts(unpriced)
       setError(null)
     } catch (e: any) {
       console.error(e)
@@ -29,6 +64,72 @@ export default function Dashboard() {
   useEffect(() => {
     fetchStats()
   }, [])
+
+  const openPriceModal = (product: Product) => {
+    setSelectedProduct(product)
+    setPurchasePrice(product.purchaseprice ? String(product.purchaseprice) : "")
+    setRetailPercentage(product.retailpercentage ? String(product.retailpercentage) : "")
+    setWholesalePercentage(product.wholesalepercentage ? String(product.wholesalepercentage) : "")
+    setRetailPrice(product.retailprice ? String(product.retailprice) : "")
+    setWholesalePrice(product.wholesaleprice ? String(product.wholesaleprice) : "")
+  }
+
+  const handlePurchasePriceChange = (val: string) => {
+    setPurchasePrice(val)
+    const pPrice = parseFloat(val) || 0
+    if (retailPercentage) {
+      const rPct = parseFloat(retailPercentage) || 0
+      setRetailPrice((pPrice * (1 + rPct / 100)).toFixed(2))
+    }
+    if (wholesalePercentage) {
+      const wPct = parseFloat(wholesalePercentage) || 0
+      setWholesalePrice((pPrice * (1 + wPct / 100)).toFixed(2))
+    }
+  }
+
+  const handleRetailPercentageChange = (val: string) => {
+    setRetailPercentage(val)
+    const pPrice = parseFloat(purchasePrice) || 0
+    const rPct = parseFloat(val) || 0
+    setRetailPrice((pPrice * (1 + rPct / 100)).toFixed(2))
+  }
+
+  const handleWholesalePercentageChange = (val: string) => {
+    setWholesalePercentage(val)
+    const pPrice = parseFloat(purchasePrice) || 0
+    const wPct = parseFloat(val) || 0
+    setWholesalePrice((pPrice * (1 + wPct / 100)).toFixed(2))
+  }
+
+  const handleSavePrices = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedProduct || !selectedProduct.id) return
+    if (!purchasePrice || !retailPrice || !wholesalePrice) {
+      alert("Please enter valid prices.")
+      return
+    }
+
+    try {
+      setSavingPrice(true)
+      const updatedProduct: Product = {
+        ...selectedProduct,
+        purchaseprice: parseFloat(purchasePrice) || 0,
+        retailprice: parseFloat(retailPrice) || 0,
+        wholesaleprice: parseFloat(wholesalePrice) || 0,
+        retailpercentage: parseFloat(retailPercentage) || 0,
+        wholesalepercentage: parseFloat(wholesalePercentage) || 0,
+      }
+      await productsApi.update(selectedProduct.id, updatedProduct)
+      productsApi.invalidateCache()
+      setSelectedProduct(null)
+      await fetchStats()
+    } catch (err) {
+      console.error(err)
+      alert("Failed to update product prices.")
+    } finally {
+      setSavingPrice(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -125,60 +226,237 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
+      {/* 3-Column Section: Recent Bills | Items Pending Pricing | Low Stock Alerts */}
+      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
+        {/* Column 1: Recent Bills */}
+        <Card className="flex flex-col">
           <CardHeader>
-            <CardTitle>Recent Bills</CardTitle>
+            <CardTitle className="text-base font-bold">Recent Bills</CardTitle>
             <CardDescription>
               Last 5 generated sales invoices.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-8">
+          <CardContent className="flex-1">
+            <div className="space-y-6">
               {stats?.recent_bills && stats.recent_bills.length > 0 ? (
                 stats.recent_bills.map((bill) => (
-                  <div key={bill.billNo} className="flex items-center">
-                    <div className="ml-4 space-y-1">
-                      <p className="text-sm font-medium leading-none">{bill.billNo}</p>
-                      <p className="text-sm text-muted-foreground">
+                  <div key={bill.billNo} className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold leading-none text-[#6b4783]">{bill.billNo}</p>
+                      <p className="text-xs text-muted-foreground">
                         {bill.type} - {bill.name} ({bill.paymentMode})
                       </p>
                     </div>
-                    <div className="ml-auto font-medium">+₹{bill.total.toFixed(2)}</div>
+                    <div className="font-semibold text-sm text-green-700">+₹{bill.total.toFixed(2)}</div>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-6 text-muted-foreground">No recent bills found.</div>
+                <div className="text-center py-6 text-xs text-muted-foreground">No recent bills found.</div>
               )}
             </div>
           </CardContent>
         </Card>
-        <Card className="col-span-3">
+
+        {/* Column 2: Items Pending Pricing */}
+        <Card className="flex flex-col border-amber-200 bg-amber-50/10">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Tag className="h-4 w-4 text-amber-600" />
+                Pending Item Prices
+              </CardTitle>
+              <CardDescription>
+                Items added without pricing.
+              </CardDescription>
+            </div>
+            {pendingProducts.length > 0 && (
+              <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 font-bold">
+                {pendingProducts.length} pending
+              </Badge>
+            )}
+          </CardHeader>
+          <CardContent className="flex-1 space-y-3">
+            {pendingProducts.length > 0 && (
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search pending items by name..."
+                  className="pl-8 h-8 text-xs bg-white border-amber-200"
+                  value={pendingSearchQuery}
+                  onChange={(e) => setPendingSearchQuery(e.target.value)}
+                />
+              </div>
+            )}
+
+            <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+              {(() => {
+                const query = pendingSearchQuery.trim().toLowerCase()
+                const filteredPendingProducts = pendingProducts
+                  .filter((product) => {
+                    if (!query) return true
+                    return product.name.toLowerCase().includes(query)
+                  })
+                  .sort((a, b) => {
+                    if (!query) return 0
+                    const aName = a.name.toLowerCase()
+                    const bName = b.name.toLowerCase()
+                    const aStarts = aName.startsWith(query)
+                    const bStarts = bName.startsWith(query)
+                    if (aStarts && !bStarts) return -1
+                    if (!aStarts && bStarts) return 1
+                    return aName.indexOf(query) - bName.indexOf(query)
+                  })
+
+                if (filteredPendingProducts.length > 0) {
+                  return filteredPendingProducts.slice(0, 15).map((product) => {
+                    const displayName = product.name.split("/")[0]
+                    return (
+                      <div key={product.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-white shadow-2xs">
+                        <div className="space-y-0.5 overflow-hidden pr-2">
+                          <p className="text-sm font-bold truncate">{displayName}</p>
+                          <p className="text-xs text-muted-foreground">Unit: {product.unit}</p>
+                        </div>
+                        {isAdmin ? (
+                          <Button
+                            size="sm"
+                            onClick={() => openPriceModal(product)}
+                            className="h-8 text-xs font-semibold bg-[#6b4783] hover:bg-[#563969] text-white shrink-0"
+                          >
+                            Set Price
+                          </Button>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-amber-700 border-amber-300 bg-amber-50 shrink-0">
+                            Pending Admin
+                          </Badge>
+                        )}
+                      </div>
+                    )
+                  })
+                }
+
+                if (pendingProducts.length > 0) {
+                  return (
+                    <div className="text-center py-6 text-xs text-muted-foreground">
+                      No pending items match "{pendingSearchQuery}"
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="text-center py-8 space-y-2">
+                    <Check className="h-8 w-8 text-green-500 mx-auto" />
+                    <p className="text-xs text-muted-foreground font-medium">All items have assigned prices!</p>
+                  </div>
+                )
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Column 3: Low Stock Alerts */}
+        <Card className="flex flex-col">
           <CardHeader>
-            <CardTitle>Low Stock Alerts</CardTitle>
+            <CardTitle className="text-base font-bold">Low Stock Alerts</CardTitle>
             <CardDescription>Items running below reorder level (5 or less)</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-8">
+          <CardContent className="flex-1">
+            <div className="space-y-6">
               {stats?.low_stock_alerts && stats.low_stock_alerts.length > 0 ? (
                 stats.low_stock_alerts.map((item, i) => (
                   <div key={i} className="flex items-center">
-                    <PackageOpen className="h-9 w-9 p-2 bg-muted rounded-full text-orange-500" />
-                    <div className="ml-4 space-y-1">
-                      <p className="text-sm font-medium leading-none">{item.name}</p>
-                      <p className="text-sm text-muted-foreground text-red-500">
+                    <PackageOpen className="h-8 w-8 p-1.5 bg-orange-100 rounded-full text-orange-600 shrink-0" />
+                    <div className="ml-3 space-y-0.5 overflow-hidden">
+                      <p className="text-sm font-medium leading-none truncate">{item.name.split("/")[0]}</p>
+                      <p className="text-xs text-red-500 font-medium">
                         Only {item.stock} {item.unit} left
                       </p>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-6 text-muted-foreground">No low-stock items detected.</div>
+                <div className="text-center py-6 text-xs text-muted-foreground">No low-stock items detected.</div>
               )}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Admin Price Editor Dialog */}
+      {selectedProduct && (
+        <Dialog open={!!selectedProduct} onOpenChange={(open) => !open && setSelectedProduct(null)}>
+          <DialogContent className="sm:max-w-[500px]">
+            <form onSubmit={handleSavePrices}>
+              <DialogHeader>
+                <DialogTitle className="text-xl font-semibold text-[#6b4783]">
+                  Set Product Prices
+                </DialogTitle>
+                <DialogDescription>
+                  Enter purchase price and profit margins for <strong>{selectedProduct.name.split("/")[0]}</strong>.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dashPurchasePrice" className="font-bold text-sm">Purchase Price (₹) <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="dashPurchasePrice"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={purchasePrice}
+                    onChange={(e) => handlePurchasePriceChange(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="dashRetailPct" className="text-xs font-semibold">Retail Margin (%)</Label>
+                    <Input
+                      id="dashRetailPct"
+                      type="number"
+                      placeholder="e.g. 15"
+                      value={retailPercentage}
+                      onChange={(e) => handleRetailPercentageChange(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="dashWholesalePct" className="text-xs font-semibold">Wholesale Margin (%)</Label>
+                    <Input
+                      id="dashWholesalePct"
+                      type="number"
+                      placeholder="e.g. 8"
+                      value={wholesalePercentage}
+                      onChange={(e) => handleWholesalePercentageChange(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Calculated Retail Price</Label>
+                    <p className="text-lg font-bold text-green-700">₹{parseFloat(retailPrice || "0").toFixed(2)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Calculated Wholesale Price</Label>
+                    <p className="text-lg font-bold text-blue-700">₹{parseFloat(wholesalePrice || "0").toFixed(2)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setSelectedProduct(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={savingPrice} className="bg-[#6b4783] hover:bg-[#563969] text-white">
+                  {savingPrice ? <RefreshCw className="h-4 w-4 animate-spin mr-1" /> : null}
+                  Save Prices
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

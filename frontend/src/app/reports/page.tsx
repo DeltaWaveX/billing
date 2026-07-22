@@ -135,8 +135,8 @@ export default function DailySalesPage() {
             </div>
 
             {/* Right Data Table */}
-            <div className="flex-1 rounded-md border bg-white overflow-hidden shadow-sm">
-              <Table>
+            <div className="flex-1 rounded-md border bg-white overflow-x-auto shadow-sm">
+              <Table className="min-w-[650px]">
                 <TableHeader className="bg-muted/50 border-b">
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="font-bold text-foreground">Date</TableHead>

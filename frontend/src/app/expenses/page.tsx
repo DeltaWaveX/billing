@@ -187,31 +187,44 @@ export default function ExpensesPage() {
     }
   }
 
-  const filteredExpenses = expenses.filter(
-    (exp) =>
-      exp.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      exp.description.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const eQuery = searchQuery.trim().toLowerCase()
+  const filteredExpenses = expenses
+    .filter(
+      (exp) =>
+        !eQuery ||
+        exp.category.toLowerCase().includes(eQuery) ||
+        exp.description.toLowerCase().includes(eQuery)
+    )
+    .sort((a, b) => {
+      if (!eQuery) return 0
+      const aCat = a.category.toLowerCase()
+      const bCat = b.category.toLowerCase()
+      const aStarts = aCat.startsWith(eQuery) || a.description.toLowerCase().startsWith(eQuery)
+      const bStarts = bCat.startsWith(eQuery) || b.description.toLowerCase().startsWith(eQuery)
+      if (aStarts && !bStarts) return -1
+      if (!aStarts && bStarts) return 1
+      return aCat.indexOf(eQuery) - bCat.indexOf(eQuery)
+    })
 
   return (
     <div className="flex-1 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Expenses</h2>
           <p className="text-muted-foreground">Log and manage your daily business expenses.</p>
         </div>
-        <Button onClick={openAddDialog} className="gap-2 bg-[#6b4783] hover:bg-[#563969] text-white">
+        <Button onClick={openAddDialog} className="gap-2 bg-[#6b4783] hover:bg-[#563969] text-white w-full sm:w-auto">
           <Plus className="h-4 w-4" />
           Add Expense
         </Button>
       </div>
 
-      <div className="flex items-center justify-between gap-4 py-4">
-        <div className="relative w-72">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 py-4">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search expenses by category or description..."
-            className="pl-8"
+            className="pl-8 w-full"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -228,8 +241,8 @@ export default function ExpensesPage() {
       ) : error ? (
         <div className="p-6 text-center text-destructive font-medium bg-red-50 rounded-md">{error}</div>
       ) : (
-        <div className="rounded-md border bg-white overflow-hidden shadow-sm">
-          <Table>
+        <div className="rounded-md border bg-white overflow-x-auto shadow-sm">
+          <Table className="min-w-[650px]">
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead>#</TableHead>

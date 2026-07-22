@@ -1,6 +1,6 @@
 "use client"
 
-import { Bell, Search, User } from "lucide-react"
+import { Bell, Search, User, Menu } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,11 +14,22 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/components/auth-provider"
 
-export function Navbar() {
+export function Navbar({ onMenuClick }: { onMenuClick?: () => void } = {}) {
   const { user, logout } = useAuth()
 
   return (
-    <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-6 lg:h-[60px]">
+    <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 md:px-6 lg:h-[60px]">
+      {onMenuClick && (
+        <Button
+          variant="outline"
+          size="icon"
+          className="md:hidden shrink-0 h-9 w-9"
+          onClick={onMenuClick}
+        >
+          <Menu className="h-5 w-5 text-slate-700" />
+          <span className="sr-only">Toggle navigation menu</span>
+        </Button>
+      )}
       <div className="w-full flex-1">
         <form onSubmit={(e) => e.preventDefault()}>
           <div className="relative">

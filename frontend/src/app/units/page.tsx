@@ -100,11 +100,24 @@ export default function UnitsPage() {
     }
   }
 
-  const filteredUnits = units.filter(
-    (unit) =>
-      unit.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      unit.print_label.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const uQuery = searchQuery.trim().toLowerCase()
+  const filteredUnits = units
+    .filter(
+      (unit) =>
+        !uQuery ||
+        unit.name.toLowerCase().includes(uQuery) ||
+        unit.print_label.toLowerCase().includes(uQuery)
+    )
+    .sort((a, b) => {
+      if (!uQuery) return 0
+      const aName = a.name.toLowerCase()
+      const bName = b.name.toLowerCase()
+      const aStarts = aName.startsWith(uQuery) || a.print_label.toLowerCase().startsWith(uQuery)
+      const bStarts = bName.startsWith(uQuery) || b.print_label.toLowerCase().startsWith(uQuery)
+      if (aStarts && !bStarts) return -1
+      if (!aStarts && bStarts) return 1
+      return aName.indexOf(uQuery) - bName.indexOf(uQuery)
+    })
 
   if (loading && units.length === 0) {
     return (
@@ -116,30 +129,30 @@ export default function UnitsPage() {
 
   return (
     <div className="flex-1 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">List of Units</h2>
           <p className="text-muted-foreground">List of units in use by your product inventory.</p>
         </div>
-        <Button onClick={handleOpenAdd} className="bg-[#6b4783] hover:bg-[#563969] text-white">
+        <Button onClick={handleOpenAdd} className="bg-[#6b4783] hover:bg-[#563969] text-white w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" /> Add Unit
         </Button>
       </div>
 
-      <div className="flex items-center justify-between gap-4 py-2">
-        <div className="relative w-72">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 py-2">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search units..."
-            className="pl-8"
+            className="pl-8 w-full"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="rounded-md border bg-white overflow-hidden">
-        <Table>
+      <div className="rounded-md border bg-white overflow-x-auto">
+        <Table className="min-w-[500px]">
           <TableHeader>
             <TableRow>
               <TableHead className="w-[80px]">#</TableHead>
